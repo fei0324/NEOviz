@@ -1356,11 +1356,34 @@ def initialize_ky(X, n_desired=None):
 
     Q = np.zeros((n, n))
     us = []
-    for i in range(n):
-        c = orthogonalize(Q[:, :i], np.random.rand(n))
-        us.append(np.argmax(np.abs(c.dot(X))))
-        Q[:, i] = orthogonalize(Q[:, :i], X[:, us[-1]])
+    i = 0
+    c = orthogonalize(Q[:, :i], np.random.rand(n))
+    us.append(np.argmax(np.abs(c.dot(X))))
+    Q[:, i] = orthogonalize(Q[:, :i], X[:, us[-1]])
+    # print("us", us)
 
+    while len(us) < n:
+        print("i", i)
+    # for i in range(n):
+        rand_n = np.random.rand(n)
+        print(rand_n)
+        # c = orthogonalize(Q[:, :i], np.random.rand(n))
+        c = orthogonalize(Q[:, :i], rand_n)
+        print("c", c)
+        # print(np.abs(c.dot(X)))
+        # print(X)
+        arg_max = np.argmax(np.abs(c.dot(X)))
+        print("arg_max", arg_max)
+        print("us", us)
+        while arg_max in us:
+            arg_max = np.random.randint(m)
+            # arg_max += 1
+        us.append(arg_max)
+        i += 1
+        Q[:, i] = orthogonalize(Q[:, :i], X[:, us[-1]])
+    
+
+    print("us", us)
     u = np.zeros(m)
     u[us] = 1.0/n
     return u
@@ -2109,6 +2132,7 @@ def kurtosis(X, aggregate='mean', do_log=True):
 
 def choose_init(X, pr):
     n, m = X.shape
+    print("n", n)
 
     init_size = pr.init_size
     if init_size is None:
@@ -2136,6 +2160,7 @@ def choose_init(X, pr):
         if pr.initialize != 'ky':
             warnings.warn(('Did not recognize initialization %s.\n'
                            'Defaulting to KY initialization.'))
+        print("init_size", init_size)
         x_k = initialize_ky(X, n_desired=init_size)
     return x_k
 
@@ -2612,12 +2637,14 @@ def mvee2(X, **kwargs):
     # At some point, the code may be changed to refer to this as 'u' or 'u_k',
     # either of which would be more clear and consistent.
     x_k = choose_init(X, pr)
+    print(pr.initialize)
+    print(pr.init_size)
 
     # Initialize working set -- line (5) of Algorithm 2
     # Line (5) is included before lines (3) and (4) in this implementation
     # because our Cholesky routine is more efficient when using the
     # 'constraints' array directly rather than looking for nonzeros in 'u'
-    working = list(np.where(x_k < 1e-5)[0])
+    working = list(np.where(x_k < 1e-25)[0])
     constraints = Constraints(working, m + 1, Cache(X))
     Z = NullSpaceMatrix(constraints)
     try:
@@ -2625,13 +2652,21 @@ def mvee2(X, **kwargs):
     except ValueError:
         fake_working = 0
     all_indices = np.arange(m)
-
+    
+    # if len(x_k[~constraints.active]) == 2:
+    # print(m)
+    # print(x_k)
+    # print("fake working", fake_working)
+    # print(constraints.active)
+    print(x_k[~constraints.active].shape)
+    # print(x_k[~constraints.active])
     # Calculate initial state -- line (3) of Algorithm 2
     L = cholesky_small(constraints, x_k[~constraints.active])
 
     # Calculate projected gradient
     # This is computed here only because it is sometimes of interest to track
     # the initial projected gradient.
+    print(L.shape)  # (3, 2)
     g_z = projected_gradient_small(constraints, L)
 
     if DO_CUDA:
