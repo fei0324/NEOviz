@@ -2,10 +2,13 @@ import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import json
+import os
 
 from mvee import mvee2
 from plotting import plot_ellipse
 from matplotlib.patches import Ellipse
+from astropy import units as astrounit
 
 import spiceypy as spice
 METAKERNEL = 'meta-kernel.tm'
@@ -273,38 +276,170 @@ def getStartingPoint(vec_csun, nss, trans_z, rotate_mat, H_2d):
     # compute intersection point on the 2d ellipse centered at the origin
     elli_r_o = getRayEllipseIntersection(a, b, rotated_c_mp_2d)
 
-    return elli_r_o
+    return rotated_c_mp_2d, elli_r_o
 
 
-def sampleEllipse2D():
+def angle2phi(angle, a, b):
     """
-    Sample the 2D ellipse centered at the origin.
+    From the actual angle to the parameter phi of the parameterized equation of an ellipse
+    x = a*sin(phi), y = a*cos(phi)
+    a, b are the semi-major axes radii of the ellipse
     """
-    pass
+    # phi = np.arctan2(a*np.tan(angle), b)  # this only gives results from -pi/2 to pi/2 need the whole 2pi
+    phi = angle - np.arctan2((b-a)*np.tan(angle), b + a*np.tan(angle)**2)
+    
+    return phi
 
 
+def ellipse_arc(a, b, theta, n):
+    """Cumulative arc length of ellipse with given dimensions"""
+
+    # Divide the interval [theta , theta + 2*pi] into n steps at regular angles
+    t = np.linspace(theta, theta + 2*np.pi, n)
+
+    # Using parametric form of ellipse, compute ellipse coord for each t
+    x, y = np.array([a * np.cos(t), b * np.sin(t)])
+
+    # Compute vector distance between each successive point
+    x_diffs, y_diffs = x[1:] - x[:-1], y[1:] - y[:-1]
+
+    cumulative_distance = [0]
+    c = 0
+
+    # Iterate over the vector distances, cumulating the full arc
+    for xd, yd in zip(x_diffs, y_diffs):
+        c += np.sqrt(xd**2 + yd**2)
+        cumulative_distance.append(c)
+    cumulative_distance = np.array(cumulative_distance)
+
+    # Return theta-values, distance cumulated at each theta,
+    # and total arc length for convenience
+    return t, cumulative_distance, c
+
+
+def theta_from_arc_length_constructor(a, b, theta, precision):
+    """
+    Inverse arc length function: constructs a function that returns the
+    angle associated with a given cumulative arc length for given ellipse."""
+
+    # Get arc length data for this ellipse
+    t, cumulative_distance, total_distance = ellipse_arc(a, b, theta, precision)
+
+    # Construct the function
+    def f(s):
+        assert np.all(s <= total_distance), "s out of range"
+        # Can invert through interpolation since monotonic increasing
+        return np.interp(s, cumulative_distance, t)
+
+    # return f and its domain
+    return f, total_distance
+
+
+def sampleEllipse2D(a, b, theta=0, sample_size=50, precision=1000):
+    """
+    Sample points from the 2d ellipse centered atthe origin.
+    a, b: parameters of the 2d ellipse centered at (0, 0)
+    theta: the angle to start sampling. We sample in the interval [theta, theta+2*pi]
+    n: the number of points to sample
+    precision: controls the precision of the arc length calculation.
+    """
+    theta_from_arc_length, domain = theta_from_arc_length_constructor(a, b, theta, precision)
+    # sample_size+1 to fix the issue that the first and the last points overlap
+    s = np.linspace(0, 1, sample_size+1) * domain
+    t = theta_from_arc_length(s)
+    x, y = np.array([a * np.cos(t), b * np.sin(t)])
+    # take away the last point that overlap. We now have the correct number of points without overlap
+    x = x[:-1]
+    y = y[:-1]
+    assert len(x) == sample_size
+
+    return x, y
+
+
+def transformPts3D(sampled_x: np.array, sampled_y: np.array, c_2d, rot_theta, rotate_mat, trans_z):
+    """
+    Transform the sampled points from the 2d ellipse centered at (0, 0) back to the original 3d 
+    """
+    
+    # Note: the order of rotation and translation is important. Here we have to rotate first and then translate
+    # rotate the points by theta (the angle of the 2d ellipse)
+    sampled_xy = np.stack((sampled_x, sampled_y))
+    sampled_xy = rot_theta @ sampled_xy
+
+    # shift the 2d points on the ellipse by c_2d
+    x_shift = np.full(sampled_x.shape, c_2d[0])
+    x_2d = sampled_xy[0] + x_shift
+    y_shift = np.full(sampled_y.shape, c_2d[1])
+    y_2d = sampled_xy[1] + y_shift
+    sampled_trans_xy = np.stack((x_2d, y_2d))
+
+    # transform all the points back into the original 3d space
+    z_zeros = np.zeros((1, sampled_trans_xy.shape[1]))
+    sampled_pts_3d = np.concatenate((sampled_trans_xy, z_zeros), axis=0)
+    rot_mat_inv = np.linalg.inv(rotate_mat)
+    sampled_pts_3d = rot_mat_inv @ sampled_pts_3d
+        
+    # get the inverse translation z
+    num_samples = len(sampled_x)
+    inverse_trans_vec = np.tile(np.array([0, 0, -trans_z]).T, (num_samples, 1)).T
+    sampled_pts_3d -= inverse_trans_vec
+
+    return sampled_trans_xy, sampled_pts_3d
+
+
+def dumpJSON(sampled_pts_all, c_3d_all, observer, time_arr, outpath):
+    data_dict = {"version": {"major": 0, "minor": 1}, "observer": observer, "polygons": []}
+    num_pts_per_t = sampled_pts_all[0].shape[1]
+    for t, time_step in enumerate(time_arr):
+        data_dict["polygons"].append({"time": time_step})
+        c_3d_t_meters = c_3d_all[t]
+        c_3d_t_meters *= astrounit.au.to(astrounit.m)
+        data_dict["polygons"][t]["center"] = {"x": c_3d_t_meters[0],
+                                       "y": c_3d_t_meters[1],
+                                       "z": c_3d_t_meters[2]}
+        points_arr_per_t = []
+        for i in range(num_pts_per_t):
+            pt = sampled_pts_all[t][:, i]
+            pt *= astrounit.au.to(astrounit.m)
+            points_arr_per_t.append({"x": pt[0], "y": pt[1], "z": pt[2]})
+        data_dict["polygons"][t]["points"] = points_arr_per_t
+
+    with open(outpath, 'w') as fp:
+        json.dump(data_dict, fp)
 
 
 if __name__ == "__main__":
 
     # Get positions of astroid w.r.t. the sun for a given time
     # use adam_core to get the orbit positions at a specific time
-    variants_coord_f = "../adam_core/2012 DA14/variants_coords_150.npy"
-    variants_velo_f = "../adam_core/2012 DA14/variants_velo_150.npy"
+    # variants_coord_f = "../adam_core/2012 DA14_t720_10/variants_coords_10.npy"
+    # variants_velo_f = "../adam_core/2012 DA14_t720_10/variants_velo_10.npy"
+    # time_f = "../adam_core/2012 DA14_t720_10/times_isot.npy"
+    variants_coord_f = "../adam_core/2022 SF289_t66_150/variants_coords_150.npy"
+    variants_velo_f = "../adam_core/2022 SF289_t66_150/variants_velo_150.npy"
+    time_f = "../adam_core/2022 SF289_t66_150/times_isot.npy"
     variants_coords = np.load(variants_coord_f)
     variants_velo = np.load(variants_velo_f)
     print(variants_coords.shape)  # (600, 3)
+    print(variants_coords)
     num_rows = variants_coords.shape[0]
     print(variants_velo.shape)  # (600, 3)
+    time_arr = np.load(time_f)
     num_samples = 150
-    num_time_steps = num_rows//num_samples
+    # num_time_steps = num_rows//num_samples
+    num_time_steps = len(time_arr)
+    print("num_time_steps")
+    print(num_time_steps)
     variants_coords_list = []
     variants_velo_list = []
     for i in range(num_time_steps):
         variants_coords_list.append(variants_coords[i*num_samples:(i+1)*num_samples])
         variants_velo_list.append(variants_velo[i*num_samples:(i+1)*num_samples])
 
+    sampled_pts_all = []
+    c_3d_all = []
     for i in range(num_time_steps):
+        print("time step", i)
 
         # Compute ellipsoid and center of the ellipsoid using mvee
         Xi = variants_coords_list[i].T
@@ -364,7 +499,7 @@ if __name__ == "__main__":
         # Fig 1 (3d): plot m and proj_m from the c_3d
         ax.quiver(c_3d[0], c_3d[1], c_3d[2], m[0], m[1], m[2], color='gold')
         ax.quiver(c_3d[0], c_3d[1], c_3d[2], proj_m[0], proj_m[1], proj_m[2], color='gold')
-        plt.show()
+        # plt.show()
 
         # Note that the intersection points are on a 3d plane
         # Need to transform the plane onto the xy-plane with a translation (trans_vec) and a rotation (rotate_mat)
@@ -394,6 +529,7 @@ if __name__ == "__main__":
         # Then this becomes a 2d problem
         # Compute the minimum enclosing ellipse of the intersection points on the xy-plane
         transformed_2d = transformed_points[:2, :]
+        print(transformed_2d.shape)
         L_2d, H_2d, c_2d = computeEllipsoid(transformed_2d)
         
         # Fig 2 (3d): plot the center of the ellipse
@@ -405,7 +541,7 @@ if __name__ == "__main__":
         # Fig 2 (3d): plot mp_2d and c_mp_2d
         ax.quiver(c_2d[0], c_2d[1], 0, c_mp_2d[0], c_mp_2d[1], c_mp_2d[2], color="gold")
 
-        plt.show()
+        # plt.show()
 
         # Fig 3 (2d): plot a 2D version of the problem, points and min ellipse and c_2d
         fig = plt.figure()
@@ -421,8 +557,9 @@ if __name__ == "__main__":
 
         # Rotaet c_mp_2d based on the rotation angle of the ellipse
         a, b, theta = getEllipseParam(H_2d)
-        _, rot_neg_theta = getRotationMat2D(theta)
+        rot_theta, rot_neg_theta = getRotationMat2D(theta)
         rotated_c_mp_2d = rot_neg_theta @ c_mp_2d[:2]
+        # TODO: Not sure why sometimes the rotated_c_mp_2d is on the other size of the ellipse
 
         # Fig 3 (2d): plot rotated_c_mp_2d and the ellipse without rotation
         ax.quiver(c_2d[0], c_2d[1], rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=2, color="limegreen")
@@ -430,7 +567,7 @@ if __name__ == "__main__":
         ellip = Ellipse(xy=c_2d, width=2*a, height=2*b, angle=0, **kwrg)
         ax.set_aspect('equal')
         ax.add_artist(ellip)
-        plt.show()
+        # plt.show()
 
         # Fig 4 (2d): plot the rotated array and the ellipse at the origin
         fig = plt.figure()
@@ -445,10 +582,70 @@ if __name__ == "__main__":
         ax.quiver(0, 0, rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=0.3, color="limegreen")
         
         # Compute ellipse ray intersection centered at origin
-        elli_r_o = getRayEllipseIntersection(a, b, rotated_c_mp_2d)
-        print(elli_r_o)
+        rotated_c_mp_2d, elli_r_o = getStartingPoint(vec_csun, nss, trans_z, rotate_mat, H_2d)
         
         # Fig 4 (2d): plot the intersection point
         ax.scatter(elli_r_o[0], elli_r_o[1])
-        
-        plt.show()
+
+        # Compute the angle in radiant of the intersection point
+        rad = np.arctan2(elli_r_o[1], elli_r_o[0])
+        # Transform it to the parameter for the ellipse
+        phi = angle2phi(rad, a, b)
+
+        # Fig 4 (2d): plot the new point computed from phi. it should overlap with elli_r_o
+        new_p = a*np.cos(phi), b*np.sin(phi)
+        ax.scatter(new_p[0], new_p[1], color="red")
+        # plt.show()
+        assert np.isclose(new_p[0], elli_r_o[0])
+        assert np.isclose(new_p[1], elli_r_o[1])
+
+        # Sample points from the 2d ellipse
+        x_elli_2d, y_elli_2d = sampleEllipse2D(a, b, phi, 20, 1000)
+
+        # Fig 5 (2d): plot the sampled points from the ellipse
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.set_aspect('equal')
+        ax.scatter(x_elli_2d, y_elli_2d, alpha=0.5, color="forestgreen")
+        # plot the first and the last points
+        ax.scatter(x_elli_2d[0], y_elli_2d[0], alpha=0.5, color="orange")
+        ax.scatter(x_elli_2d[1], y_elli_2d[1], alpha=0.5, color="blue")
+        ax.scatter(x_elli_2d[-1], y_elli_2d[-1], alpha=0.5, color="crimson")
+        # plt.show()
+
+        # Fig 6 (2d): Plot the original ellipse centered at c_2d and the sampled points centered at c_2d
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        transformed_2d_x = transformed_2d[0, :]
+        transformed_2d_y = transformed_2d[1, :]
+        ax.scatter(c_2d[0], c_2d[1], s=50, c='red')
+        ax.scatter(transformed_2d_x, transformed_2d_y)
+        plot_ellipse(H_2d, c_2d, ax=ax)
+
+        # Transform the sampled points back to the original 3d space
+        sampled_trans_xy, sampled_pts_3d = transformPts3D(x_elli_2d, y_elli_2d, c_2d, rot_theta, rotate_mat, trans_z)
+        print("sampled 2d points shape")
+        print(sampled_trans_xy.shape)
+        plt.scatter(sampled_trans_xy[0], sampled_trans_xy[1], color="orange")
+        # plt.show()
+
+        # Fig 7 (3d): 
+        fig = plt.figure()
+        ax = fig.add_subplot(projection="3d")
+        ax.set_aspect('equal')
+        ax.scatter(sampled_pts_3d[0], sampled_pts_3d[1], sampled_pts_3d[2], color="orange")
+        ax.scatter(Xi[0, :], Xi[1, :], Xi[2, :], color="blue")
+        ax.scatter(c_3d[0], c_3d[1], c_3d[2], s=50, color="red")
+        # plt.show()
+        plt.close("all")
+
+        sampled_pts_all.append(sampled_pts_3d)
+        c_3d_all.append(c_3d)
+
+    outdir = "./sampled_data"
+    os.makedirs(outdir, exist_ok=True)
+    # json_file = "2012_DA14_t" + str(num_time_steps) + "_" + str(Xi.shape[1]) + ".json"
+    json_file = "2022_SF289_t" + str(num_time_steps) + "_" + str(Xi.shape[1]) + ".json"
+    outpath = os.path.join(outdir, json_file)
+    print(outpath)
+    dumpJSON(sampled_pts_all, c_3d_all, "SSB", time_arr, outpath)
