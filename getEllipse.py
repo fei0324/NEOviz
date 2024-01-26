@@ -359,6 +359,12 @@ def sampleEllipse2D(a, b, theta=0, sample_size=50, precision=1000):
 def transformPts3D(sampled_x: np.array, sampled_y: np.array, c_2d, rot_theta, rotate_mat, trans_z):
     """
     Transform the sampled points from the 2d ellipse centered at (0, 0) back to the original 3d 
+    
+    sampled_x, sampled_y: sampled 2d points on the ellipse centered at (0, 0) with no rotation
+    c_2d: center of the ellipse in 2d
+    rot_theta: 2d rotational matrix (to rotate back to the original rotation of the ellipse)
+    rot_mat: 3d tranformation matrix (from the xy plane to the 3d space)
+    trans_z: translation amount in the z direction
     """
     
     # Note: the order of rotation and translation is important. Here we have to rotate first and then translate
@@ -387,7 +393,62 @@ def transformPts3D(sampled_x: np.array, sampled_y: np.array, c_2d, rot_theta, ro
     return sampled_trans_xy, sampled_pts_3d
 
 
-def dumpJSON(sampled_pts_all, c_3d_all, observer, time_arr, outpath):
+def getSampledPtVals(a, b, c_2d, sampled_x, sampled_y, transformed_2d_x, transformed_2d_y, rot_neg_theta, r=None):
+    
+    # rotate the original 2d points centered at (0, 0) by neg_theta
+    x_shift_ori = np.full(transformed_2d_x.shape, c_2d[0])
+    y_shift_ori = np.full(transformed_2d_y.shape, c_2d[1])
+    trans_rot_2d_x = transformed_2d_x - x_shift_ori
+    trans_rot_2d_y = transformed_2d_y - y_shift_ori
+    trans_rot_2d_xy = np.stack((trans_rot_2d_x, trans_rot_2d_y))
+    trans_rot_2d_xy = rot_neg_theta @ trans_rot_2d_xy
+    
+    intersections_2d_all = np.zeros(trans_rot_2d_xy.shape)
+    for i in range(trans_rot_2d_xy.shape[1]):
+        ray_i = trans_rot_2d_xy[:, i]
+        intersections_2d_all[:, i] = getRayEllipseIntersection(a, b, ray_i)
+
+    # count the number of intersections within a certain radius of each sampled point on the ellipse
+    # compute distance table (num sample points, num of intersection points)
+    sampled_xy = np.stack((sampled_x, sampled_y))
+    num_sampled_pts = sampled_xy.shape[1]
+    num_intersection_pts = intersections_2d_all.shape[1]
+    lookup_table = np.zeros((num_sampled_pts, num_intersection_pts))
+    sampled_xy = np.stack((sampled_x, sampled_y))
+    for i in range(num_sampled_pts):
+        for j in range(num_intersection_pts):
+            lookup_table[i, j] = np.linalg.norm(sampled_xy[:, i] - intersections_2d_all[:, j])
+    
+    
+    # select threshold r (take the min of 2a, 2b and half of the distance between two adjacent sample points)
+    if r is None:
+        sample_pts_dist = 0.5*np.linalg.norm(sampled_xy[:, 0] - sampled_xy[:, 1])
+        r = min(2*a, 2*b, sample_pts_dist)
+
+    # distance table -> indicator matrix
+    indicator_mat = np.where(lookup_table < r, 1, 0)
+
+    # count the number of points for each sample point
+    sampled_pt_vals = np.sum(indicator_mat, axis=1, dtype=int)
+    sampled_pt_vals = sampled_pt_vals.astype(int).tolist()
+
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    ax.set_aspect('equal')
+    ax.scatter(trans_rot_2d_xy[0], trans_rot_2d_xy[1])
+    ax.scatter(intersections_2d_all[0], intersections_2d_all[1], alpha=0.3, color="green")
+    sample_i_circle_index = np.where(indicator_mat[0] == 1)[0]
+    sample_i_circle = intersections_2d_all[:, sample_i_circle_index]
+    ax.scatter(sample_i_circle[0], sample_i_circle[1], color="deepskyblue")
+    ax.scatter(sampled_x, sampled_y, c=sampled_pt_vals, cmap="magma_r")
+    for i, val in enumerate(sampled_pt_vals):
+        ax.annotate(val, (sampled_x[i], sampled_y[i]))
+    plt.show()
+
+    return sampled_pt_vals
+
+
+def dumpJSON(sampled_pts_all, c_3d_all, observer, time_arr, outpath, sampled_pt_vals_all=None):
     data_dict = {"version": {"major": 0, "minor": 1}, "observer": observer, "polygons": []}
     num_pts_per_t = sampled_pts_all[0].shape[1]
     for t, time_step in enumerate(time_arr):
@@ -397,11 +458,15 @@ def dumpJSON(sampled_pts_all, c_3d_all, observer, time_arr, outpath):
         data_dict["polygons"][t]["center"] = {"x": c_3d_t_meters[0],
                                        "y": c_3d_t_meters[1],
                                        "z": c_3d_t_meters[2]}
+        
+        if sampled_pt_vals_all is not None:
+            sampled_pt_val_t = sampled_pt_vals_all[t]
+
         points_arr_per_t = []
         for i in range(num_pts_per_t):
             pt = sampled_pts_all[t][:, i]
             pt *= astrounit.au.to(astrounit.m)
-            points_arr_per_t.append({"x": pt[0], "y": pt[1], "z": pt[2]})
+            points_arr_per_t.append({"x": pt[0], "y": pt[1], "z": pt[2], "val": sampled_pt_val_t[i]})
         data_dict["polygons"][t]["points"] = points_arr_per_t
 
     with open(outpath, 'w') as fp:
@@ -412,12 +477,12 @@ if __name__ == "__main__":
 
     # Get positions of astroid w.r.t. the sun for a given time
     # use adam_core to get the orbit positions at a specific time
-    # variants_coord_f = "../adam_core/2012 DA14_t720_10/variants_coords_10.npy"
-    # variants_velo_f = "../adam_core/2012 DA14_t720_10/variants_velo_10.npy"
-    # time_f = "../adam_core/2012 DA14_t720_10/times_isot.npy"
-    variants_coord_f = "../adam_core/2022 SF289_t66_150/variants_coords_150.npy"
-    variants_velo_f = "../adam_core/2022 SF289_t66_150/variants_velo_150.npy"
-    time_f = "../adam_core/2022 SF289_t66_150/times_isot.npy"
+    variants_coord_f = "../adam_core/2012 DA14_t720_150/variants_coords_150.npy"
+    variants_velo_f = "../adam_core/2012 DA14_t720_150/variants_velo_150.npy"
+    time_f = "../adam_core/2012 DA14_t720_150/times_isot.npy"
+    # variants_coord_f = "../adam_core/2022 SF289_t66_150/variants_coords_150.npy"
+    # variants_velo_f = "../adam_core/2022 SF289_t66_150/variants_velo_150.npy"
+    # time_f = "../adam_core/2022 SF289_t66_150/times_isot.npy"
     variants_coords = np.load(variants_coord_f)
     variants_velo = np.load(variants_velo_f)
     print(variants_coords.shape)  # (600, 3)
@@ -438,6 +503,7 @@ if __name__ == "__main__":
 
     sampled_pts_all = []
     c_3d_all = []
+    sampled_pt_vals_all = []
     for i in range(num_time_steps):
         print("time step", i)
 
@@ -613,6 +679,17 @@ if __name__ == "__main__":
         ax.scatter(x_elli_2d[-1], y_elli_2d[-1], alpha=0.5, color="crimson")
         # plt.show()
 
+        # Fig 5.5 (2d): plot the sampled points colored by the number of original points assigned to each sample point
+        sampled_pt_vals = getSampledPtVals(a, b, c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta)
+        sampled_pt_vals_all.append(sampled_pt_vals)
+        fig = plt.figure()
+        ax = fig.add_subplot()
+        ax.set_aspect('equal')
+        ax.scatter(x_elli_2d, y_elli_2d, c=sampled_pt_vals, cmap="magma_r")
+        for i, val in enumerate(sampled_pt_vals):
+            ax.annotate(val, (x_elli_2d[i], y_elli_2d[i]))
+        # plt.show()
+
         # Fig 6 (2d): Plot the original ellipse centered at c_2d and the sampled points centered at c_2d
         fig = plt.figure()
         ax = fig.add_subplot()
@@ -629,23 +706,23 @@ if __name__ == "__main__":
         plt.scatter(sampled_trans_xy[0], sampled_trans_xy[1], color="orange")
         # plt.show()
 
-        # Fig 7 (3d): 
+        # Fig 7 (3d): plot the original points in 3d and the sampled ellipse in 3d
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         ax.set_aspect('equal')
         ax.scatter(sampled_pts_3d[0], sampled_pts_3d[1], sampled_pts_3d[2], color="orange")
         ax.scatter(Xi[0, :], Xi[1, :], Xi[2, :], color="blue")
         ax.scatter(c_3d[0], c_3d[1], c_3d[2], s=50, color="red")
-        # plt.show()
+        plt.show()
         plt.close("all")
 
         sampled_pts_all.append(sampled_pts_3d)
         c_3d_all.append(c_3d)
 
-    outdir = "./sampled_data"
-    os.makedirs(outdir, exist_ok=True)
+    # outdir = "./sampled_data"
+    # os.makedirs(outdir, exist_ok=True)
     # json_file = "2012_DA14_t" + str(num_time_steps) + "_" + str(Xi.shape[1]) + ".json"
-    json_file = "2022_SF289_t" + str(num_time_steps) + "_" + str(Xi.shape[1]) + ".json"
-    outpath = os.path.join(outdir, json_file)
-    print(outpath)
-    dumpJSON(sampled_pts_all, c_3d_all, "SSB", time_arr, outpath)
+    # json_file = "2022_SF289_t" + str(num_time_steps) + "_" + str(Xi.shape[1]) + ".json"
+    # outpath = os.path.join(outdir, json_file)
+    # print(outpath)
+    # dumpJSON(sampled_pts_all, c_3d_all, "SSB", time_arr, outpath, sampled_pt_vals_all)

@@ -1363,18 +1363,18 @@ def initialize_ky(X, n_desired=None):
     # print("us", us)
 
     while len(us) < n:
-        print("i", i)
-    # for i in range(n):
+        # print("i", i)
+        # for i in range(n):
         rand_n = np.random.rand(n)
-        print(rand_n)
+        # print(rand_n)
         # c = orthogonalize(Q[:, :i], np.random.rand(n))
         c = orthogonalize(Q[:, :i], rand_n)
-        print("c", c)
+        # print("c", c)
         # print(np.abs(c.dot(X)))
         # print(X)
         arg_max = np.argmax(np.abs(c.dot(X)))
-        print("arg_max", arg_max)
-        print("us", us)
+        # print("arg_max", arg_max)
+        # print("us", us)
         while arg_max in us:
             arg_max = np.random.randint(m)
             # arg_max += 1
@@ -1383,7 +1383,7 @@ def initialize_ky(X, n_desired=None):
         Q[:, i] = orthogonalize(Q[:, :i], X[:, us[-1]])
     
 
-    print("us", us)
+    # print("us", us)
     u = np.zeros(m)
     u[us] = 1.0/n
     return u
@@ -2132,7 +2132,7 @@ def kurtosis(X, aggregate='mean', do_log=True):
 
 def choose_init(X, pr):
     n, m = X.shape
-    print("n", n)
+    # print("n", n)
 
     init_size = pr.init_size
     if init_size is None:
@@ -2160,7 +2160,7 @@ def choose_init(X, pr):
         if pr.initialize != 'ky':
             warnings.warn(('Did not recognize initialization %s.\n'
                            'Defaulting to KY initialization.'))
-        print("init_size", init_size)
+        # print("init_size", init_size)
         x_k = initialize_ky(X, n_desired=init_size)
     return x_k
 
@@ -2637,8 +2637,8 @@ def mvee2(X, **kwargs):
     # At some point, the code may be changed to refer to this as 'u' or 'u_k',
     # either of which would be more clear and consistent.
     x_k = choose_init(X, pr)
-    print(pr.initialize)
-    print(pr.init_size)
+    # print(pr.initialize)
+    # print(pr.init_size)
 
     # Initialize working set -- line (5) of Algorithm 2
     # Line (5) is included before lines (3) and (4) in this implementation
