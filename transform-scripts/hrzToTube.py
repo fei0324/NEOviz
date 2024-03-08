@@ -119,7 +119,7 @@ def writeTubeFile(filename, tube):
   file.close()
 
 def main():
-  lines = readHrz("./filename.hrz")
+  lines = readHrz("./hrzData/filename.hrz")
   #printLines(lines)
 
   onlyDataLines = getOnlyDataLines(lines)

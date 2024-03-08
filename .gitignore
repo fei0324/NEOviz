@@ -8,3 +8,9 @@ tutorial*
 notes/
 kernels/
 sampled_data/
+impact.png
+data/
+transforms-script/hrzData/
+transforms-script/jsonData/
+transforms-script/transformsData/
+transforms-script/transforms/
