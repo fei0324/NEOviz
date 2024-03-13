@@ -21,6 +21,11 @@ def create_kernels(
     # Get the list of variants
     orbit_ids = propagated_orbits.orbit_id.unique().to_numpy(zero_copy_only=False)
 
+    # Create list of filenames that count form 000001 to 999999
+    K = 6
+    N = len(orbit_ids)
+    filenames = [str(ele + 1).zfill(K) for ele in range(N)]
+
     for i, orbit_id in enumerate(orbit_ids):
         # Get the current variant in the list
         mask = pc.equal(propagated_orbits.orbit_id, orbit_id)
@@ -42,7 +47,7 @@ def create_kernels(
         states[:, 3:6] /= (units.d).to(units.s)
 
         # Create and open the out bsp file
-        out_bsp = os.path.join(out_dir, f"{orbit_id}.bsp")
+        out_bsp = os.path.join(out_dir, f"{filenames[i]}.bsp")
         file = spice.spkopn(out_bsp, f"{target_id}", 0)
 
         # Fill the bsp kernel file
