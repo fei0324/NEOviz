@@ -17,14 +17,20 @@ if __name__ == "__main__":
   id_offset = 1000000
 
   # Get the kernel files
-  input_path = "./data/2023 CX1_t323_50/propagated_variants/"
+  input_path = "./data/2012 DA14/2012_03_05T06_24_12/openspace_variants/"
   kernel_list = os.listdir(input_path)
   kernel_list.sort()
 
   # Set up the image
   imageWidth = 5400
   imageHeight = 2700
-  image = Image.new("RGB", (imageWidth, imageHeight), (0, 0, 0))
+  image = Image.new("RGBA", (imageWidth, imageHeight), (0, 0, 0, 0))
+
+  # Include night layer image to asses population density
+  dirName = os.path.dirname(__file__)
+  nightFile = os.path.join(dirName, "earth_night.png")
+  nightImage = Image.open(nightFile)
+  nightPixels = nightImage.load()
 
   # Convert to an image we can draw on
   drawImage = ImageDraw.Draw(image)
@@ -34,8 +40,11 @@ if __name__ == "__main__":
   earth_radius = 6357 # minimum radius in Km
 
   # Specify the time range to search in
-  timeStart = spice.str2et ("2023-Feb-12 22:00:00.000")
-  timeEnd = spice.str2et ("2023-Feb-14")
+  # 2023 CX1_t323_50/propagated_variants/: start "2023-Feb-12 22:00:00.000", end "2023-Feb-14"
+  # 2004 MN4/openspace_variants/: start "2029-02-01", end "2029-08-17"
+  # 2012 DA14/2012_03_05T06_24_12/openspace_variants/: start "2012-03-06", end "2013-09-30"
+  timeStart = spice.str2et("2012-03-06")
+  timeEnd = spice.str2et("2013-09-30")
   timerange = spice.cell_double(200)
   spice.wninsd(timeStart, timeEnd, timerange)
 
@@ -46,7 +55,7 @@ if __name__ == "__main__":
 
     # Make sure it is a kernel file and not a directory
     variant_kernel = os.path.join(input_path, variant)
-    if  not os.path.isfile(variant_kernel):
+    if not os.path.isfile(variant_kernel):
       print(variant_kernel, "is not a file")
       variant_id += 1
       continue
@@ -69,7 +78,7 @@ if __name__ == "__main__":
 
     # Check that we got a valid result
     if spice.wncard(result) == 0:
-      print("Variant", variant_name, "does not impact Earth")
+      #print("Variant", variant_name, "does not impact Earth")
       spice.unload(variant_kernel)
       variant_id += 1
       continue
@@ -102,26 +111,45 @@ if __name__ == "__main__":
       long += 180 # The international day time line is the 0 line (don't know why)
       print("position", lat, long, alt)
 
-      # Normalize coordinate to be withing 0 to 1 range
+      # Normalize coordinate to be within 0 to 1 range
       lat *= -1 # Flip the y axis for the image
       pixelLat = (lat + 90)/180
       pixelLong = (long + 180)/360
 
       # Find corresponding pixel in equirectangular texture
-      pixelY = pixelLat * imageHeight
-      pixelX = pixelLong * imageWidth
-      print("pixel", int(pixelX), int(pixelY))
+      pixelY = round(pixelLat * imageHeight)
+      pixelX = round(pixelLong * imageWidth)
+      print("pixel", pixelX, pixelY)
 
-      # Paint a splat at the coresponding spot
-      # image.putpixel((int(pixelX), int(pixelY)), (255, 255, 255))
-      shape = [(int(pixelX) - brushSize, int(pixelY) - brushSize), (int(pixelX) + brushSize, int(pixelY) + brushSize)]
-      drawImage.ellipse(shape, fill=(255, 255, 255))
+      # Get color on night image, sample an area around the pixel and add up the color
+      nightColorRed = 0
+      for j in range(-int(brushSize/2), int(brushSize/2) + 1):
+        for k in range(-int(brushSize/2), int(brushSize/2) + 1):
+          pixedlcoord = pixelX + j, pixelY + k
+          if (pixedlcoord[0] < 0 or pixedlcoord[1] < 0 or pixedlcoord[0] >= imageWidth or pixedlcoord[1] >= imageHeight):
+            # Dont cross the borders of the image
+            continue
+
+          # Only use the red channel in the night layer
+          nightColorRed += nightPixels[pixedlcoord][0]
+
+      # Normaize the color
+      nightColorRed = np.clip(round(nightColorRed / (brushSize * brushSize)), 0, 255)
+      #print("resulting color", nightColorRed)
+
+      # Draw circle
+      shape = [(int(pixelX) - brushSize, pixelY - brushSize), (pixelX + brushSize, pixelY + brushSize)]
+      drawImage.ellipse(shape, fill=(nightColorRed, nightColorRed, nightColorRed))
 
     # Reset
     spice.unload(variant_kernel)
     variant_id += 1
 
-  # Make the dots blurry and save the resulting image
-  blurryImage = drawImage._image.filter(ImageFilter.GaussianBlur(radius = int(brushSize/2)))
+  # Make the whole image blurry
+  blurryImage = drawImage._image.filter(ImageFilter.GaussianBlur(radius = int(brushSize/4)))
   #blurryImage.show()
+
+  # Save the resulting image
   blurryImage.save("impact.png")
+
+# Impactors 2004 MN4: 88, 218, 372, 426, 498, 733, 738, 881, 893, 949, 993
