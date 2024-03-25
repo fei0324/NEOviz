@@ -12,5 +12,6 @@ KPL/MK
 
    \begindata
    KERNELS_TO_LOAD = ( 'kernels/lsk/naif0012.tls.pc',
-                       'kernels/spk/de432s.bsp')
+                       'kernels/spk/de432s.bsp',
+                       'kernels/pck/pck00011.tpc')
    \begintext
