@@ -85,8 +85,8 @@ def cluster2dPts(ori_pts_2d, t_to_cluster):
     cutplane_y = cutplane_pts_t[:, 1]
     ax.scatter(cutplane_x, cutplane_y, c=kmeans.labels_)
 
-    for i in range(len(cutplane_x)):
-        ax.annotate(i, (cutplane_x[i], cutplane_y[i]))
+    # for i in range(len(cutplane_x)):
+    #     ax.annotate(i, (cutplane_x[i], cutplane_y[i]))
     ax.legend()
     ax.grid(True)
     ax.set_aspect('equal')
@@ -121,12 +121,13 @@ def plotImpact(ori_pts_2d, impact_ids, time_steps):
 def makeSubTube(variants_coords, variants_velo, time_arr, orb_subset_ids, time_range, out_dir):
     
     num_t_steps = len(time_arr)
-    time_steps = np.arange(time_range[0], time_range[1])
+    # time_steps = np.arange(time_range[0], time_range[1])
     print(time_arr.shape)
-    time_arr_subset = time_arr[time_steps]
+    time_arr_subset = time_arr[time_range[0]:time_range[1]]
+    print(time_arr_subset)
     print(time_arr_subset.shape)
 
-    print(variants_coords.shape)  # (9,135,000, 3)
+    print(variants_coords.shape)  # (91,350,000, 3) for 10,000 samples
     print(variants_velo.shape)
     variants_coords_subset = None
     variants_velo_subset = None
@@ -154,42 +155,42 @@ def makeSubTube(variants_coords, variants_velo, time_arr, orb_subset_ids, time_r
 
 
 if __name__ == "__main__":
-    input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
-    variants_coord_f = [filename for filename in os.listdir(input_dir) if filename.startswith("variants_coords_")]
-    variants_velo_f = [filename for filename in os.listdir(input_dir) if filename.startswith("variants_velo_")]
-    time_f = os.path.join(input_dir, "times_isot.npy")
-    print(time_f)
-    # There should only be one file of each submission
-    assert len(variants_coord_f) == 1
-    assert len(variants_velo_f) == 1
-    variants_coords = np.load(os.path.join(input_dir, variants_coord_f[0]))
-    variants_velo = np.load(os.path.join(input_dir, variants_velo_f[0]))
-    time_arr = np.load(time_f)
-    print(variants_coord_f)
-    print(variants_velo_f)
-    print(len(time_arr))
+    # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
+    # variants_coord_f = [filename for filename in os.listdir(input_dir) if filename.startswith("variants_coords_")]
+    # variants_velo_f = [filename for filename in os.listdir(input_dir) if filename.startswith("variants_velo_")]
+    # time_f = os.path.join(input_dir, "times_isot.npy")
+    # print(time_f)
+    # # There should only be one file of each submission
+    # assert len(variants_coord_f) == 1
+    # assert len(variants_velo_f) == 1
+    # variants_coords = np.load(os.path.join(input_dir, variants_coord_f[0]))
+    # variants_velo = np.load(os.path.join(input_dir, variants_velo_f[0]))
+    # time_arr = np.load(time_f)
+    # print(variants_coord_f)
+    # print(variants_velo_f)
+    # print(len(time_arr))
 
-    # Bifurcation happens
-    print(time_arr[8800])
-    print(time_arr[8872])  # 2029-04-12T23:55:39.463
-    print(time_arr[8873])  # 2029-04-13T23:55:40.457
-    print(time_arr[8874])  # 2029-04-14T23:55:41.452
-    print(time_arr[8950])
-    print(time_arr[9000])
+    # # Bifurcation happens
+    # print(time_arr[8800])
+    # print(time_arr[8872])  # 2029-04-12T23:55:39.463
+    # print(time_arr[8873])  # 2029-04-13T23:55:40.457
+    # print(time_arr[8874])  # 2029-04-14T23:55:41.452
+    # print(time_arr[8950])
+    # print(time_arr[9000])
 
     # orb_subset_ids = [949, 733, 993, 88, 881]
-    # out_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/"
+    # out_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/subtube/"
     # os.makedirs(out_dir, exist_ok=True)
     # makeSubTube(variants_coords, variants_velo, time_arr, orb_subset_ids, [8800, 9000], out_dir)
 
-    json_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
+    json_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/"
     # subsetTube(json_dir, 8800, 9000)
 
     ori_pts_2d = np.load(os.path.join(json_dir, "ori_points_2d.npy"))
-    cluster2dPts(ori_pts_2d, 150)
-    impact_ids = [88, 218, 372, 426, 498, 733, 738, 881, 893, 949, 993]
+    cluster2dPts(ori_pts_2d, 100)
+    # impact_ids = [88, 218, 372, 426, 498, 733, 738, 881, 893, 949, 993]
     # impact_ids = [88, 87, 218, 217, 372, 371, 426, 425, 498, 497, 733, 732, 738, 737, 881, 880, 893, 892, 949, 948, 993, 992]
-    plotImpact(ori_pts_2d, impact_ids, [150])
+    # plotImpact(ori_pts_2d, impact_ids, [150])
     # plotImpact(ori_pts_2d, impact_ids)
     
     # tube_arr = loadJSON(json_dir)
