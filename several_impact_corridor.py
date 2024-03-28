@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageDraw
 import matplotlib as mpl
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import time
 import spiceypy as spice
 
@@ -20,7 +21,6 @@ IMAGE_HEIGHT = 2700
 
 # Set the reference distance to Earth
 EARTH_RADIUS = 6357 # minimum radius in Km
-#EARTH_RADIUS = 39000 # minimum orbital insertion distance for Earth and 2004 MN4
 
 
 # Show a progress bar in the console
@@ -192,7 +192,6 @@ def raw_impact_map(
   if not impact:
     print("No variant impacts Earth!")
     sys.stdout.flush()
-    sys.exit()
 
   # Make it all blurry
   blurryCityImage = drawCityImage._image.filter(ImageFilter.GaussianBlur(radius = halfBrush))
@@ -234,6 +233,7 @@ def color_impact_map(
   drawImage._image.save(filename)
 
 
+
 if __name__ == "__main__":
   start_time = time.time()
 
@@ -242,104 +242,113 @@ if __name__ == "__main__":
 
   # Choose what data to look at
   # 0 = 2023 CX1, 1 = 2004 MN4, 2 = 2012 DA14
-  dataItem = 1
+  nDataItems = 3
+  for dataItem in range(1, nDataItems):
 
-  # Get the kernel files
-  dataList = ["./data/2023 CX1/openspace_variants/", "./data/2004 MN4/openspace_variants_high_ip/", "./data/2012 DA14/2012_03_05T06_24_12/openspace_variants/"]
-  input_path = dataList[dataItem]
-  kernel_list = os.listdir(input_path)
-  kernel_list.sort()
+    # Get the kernel files
+    dataList = ["./data/2023 CX1/openspace_variants/", "./data/2004 MN4/openspace_variants_high_ip/", "./data/2012 DA14/2012_03_05T06_24_12/openspace_variants/"]
+    input_path = dataList[dataItem]
+    kernel_list = os.listdir(input_path)
+    kernel_list.sort()
 
-  # Include night layer image to asses population density
-  directory = os.path.dirname(__file__)
-  nightFile = os.path.join(directory, "earth_night.png")
-  nightImage = Image.open(nightFile)
-  nightPixels = nightImage.load()
+    # Include night layer image to asses population density
+    directory = os.path.dirname(__file__)
+    nightFile = os.path.join(directory, "earth_night.png")
+    nightImage = Image.open(nightFile)
+    nightPixels = nightImage.load()
 
-  # Time range
-  # 2023 CX1: start "2023-02-13T02:39:00.000", end "2023-02-13T02:59:00.000"
-  # 2004 MN4: start "2029-02-01", end "2029-08-17"
-  # 2012 DA14: start "2012-03-06", end "2013-09-30"
-  dataStartList = ["2023-02-13T02:39:00.000", "2029-02-01", "2012-03-06"]
-  dataEndList = ["2023-02-13T02:59:00.000", "2029-08-17", "2013-09-30"]
-  timeStart = spice.str2et(dataStartList[dataItem])
-  timeEnd = spice.str2et(dataEndList[dataItem])
+    # Time range
+    # 2023 CX1: start "2023-02-13T02:38:00.000", end "2023-02-13T03:00:00.000"
+    # 2004 MN4: start "2029-02-01", end "2029-08-17"
+    # 2012 DA14: start "2012-03-06", end "2013-09-30"
+    dataStartList = ["2023-02-13T02:39:00.000", "2029-02-01", "2012-03-06"]
+    dataEndList = ["2023-02-13T02:59:00.000", "2029-08-17", "2013-09-30"]
+    timeStart = spice.str2et(dataStartList[dataItem])
+    timeEnd = spice.str2et(dataEndList[dataItem])
 
-  # Filenames
-  dataNames = ["2023-CX1", "2004-MN4", "2012-DA14"]
-  extension = ".png"
-  cityFilenameStart = "images/city-" + dataNames[dataItem]
-  impactFilenameStart = "images/impact-" + dataNames[dataItem]
-  colorCityFilenameStart = "images/city-color-" + dataNames[dataItem]
-  colorImpactFilenameStart = "images/impact-color-" + dataNames[dataItem]
+    # Filenames
+    dataFolders = ["2023 CX1", "2004 MN4", "2012 DA14"]
+    extension = ".png"
+    cityFilenameStart = "images/city-images/gray/" + dataFolders[dataItem] + "/"
+    impactFilenameStart = "images/impact-images/gray/" + dataFolders[dataItem] + "/"
+    colorCityFilenameStart = "images/city-images/color/" + dataFolders[dataItem] + "/"
+    colorImpactFilenameStart = "images/impact-images/color/" + dataFolders[dataItem] + "/"
+    print("Running", dataFolders[dataItem], "...")
 
-  # Settings
-  brushSize = 15
-  maxValueCity = 30
-  maxValueImpact = 150
+    # Settings
+    minBrushSize = 4
+    maxBrushSize = 26
 
-  cityFilename = cityFilenameStart + "-BS_" + str(brushSize) + extension
-  impactFilename = impactFilenameStart + "-BS_" + str(brushSize) + extension
+    minValueCity = 50
+    maxValueCity = 260
 
-  # Get the raw map
-  impactors = []
-  raw_impact_map(
-    input_path,
-    kernel_list,
-    timeStart,
-    timeEnd,
-    nightPixels,
-    brushSize,
-    cityFilename,
-    impactFilename,
-    impactors
-  )
+    minValueImpact = 50
+    maxValueImpact = 260
 
-  #print("Impactors:")
-  #for impactor in impactors:
-  #  print(impactor)
-  #  sys.stdout.flush()
+    nColormaps = 5
+    colorMaps = [cm.viridis, cm.plasma, cm.inferno, cm.magma, cm.cividis]
+    colorMapsNames = ["viridis", "plasma", "inferno", "magma", "cividis"]
 
-  # Load the images that were just created again
-  cityFile = os.path.join(directory, cityFilename)
-  cityImage = Image.open(cityFile)
-  cityImagePixels = cityImage.load()
+    for brushSize in range(minBrushSize, maxBrushSize + 1, 2):
+      cityFilename = cityFilenameStart + "BS_" + str(brushSize) + extension
+      impactFilename = impactFilenameStart + "BS_" + str(brushSize) + extension
 
-  impactFile = os.path.join(directory, impactFilename)
-  impactImage = Image.open(impactFile)
-  impactImagePixels = impactImage.load()
+      impactors = []
+      # Get the raw map
+      raw_impact_map(
+        input_path,
+        kernel_list,
+        timeStart,
+        timeEnd,
+        nightPixels,
+        brushSize,
+        cityFilename,
+        impactFilename,
+        impactors
+      )
 
-  # Colormap settings
-  colorMaps = [cm.viridis, cm.plasma, cm.inferno, cm.magma, cm.cividis]
-  colorMapsNames = ["viridis", "plasma", "inferno", "magma", "cividis"]
-  colorMapIndex = 1
+      if not impactors:
+        continue
 
-  colorCityFilename = colorCityFilenameStart + "-BS_" + str(brushSize) + "_CV_" + str(maxValueCity) + "_" + colorMapsNames[colorMapIndex] + extension
-  colorImpactFilename = colorImpactFilenameStart + "-BS_" + str(brushSize) + "_IV_" + str(maxValueImpact) + "_" + colorMapsNames[colorMapIndex] + extension
+      # Load the images that were just created again
+      cityFile = os.path.join(directory, cityFilename)
+      cityImage = Image.open(cityFile)
+      cityImagePixels = cityImage.load()
 
-  # Normalize to the transfer funciton range
-  normalization = mpl.colors.Normalize(vmin=0, vmax=maxValueCity)
-  cityMap = cm.ScalarMappable(norm=normalization, cmap=colorMaps[colorMapIndex])
+      impactFile = os.path.join(directory, impactFilename)
+      impactImage = Image.open(impactFile)
+      impactImagePixels = impactImage.load()
 
-  normalization = mpl.colors.Normalize(vmin=0, vmax=maxValueImpact)
-  impactMap = cm.ScalarMappable(norm=normalization, cmap=colorMaps[colorMapIndex])
+      for colorMapIndex in range(nColormaps):
+        for valueCity in range(minValueCity, maxValueCity + 1, 10):
+          colorCityFilename = colorCityFilenameStart + "BS_" + str(brushSize) + "_CV_" + str(valueCity) + "_" + colorMapsNames[colorMapIndex] + extension
 
-  # Apply a tranfer function to the map to get color
-  color_impact_map(
-    cityImagePixels,
-    colorCityFilename,
-    cityMap
-  )
+          # Normalize to the transfer funciton range
+          normalization = mpl.colors.Normalize(vmin=0, vmax=valueCity)
+          cityMap = cm.ScalarMappable(norm=normalization, cmap=colorMaps[colorMapIndex])
 
-  # Apply a tranfer function to the map to get color
-  color_impact_map(
-    impactImagePixels,
-    colorImpactFilename,
-    impactMap
-  )
+          # Apply a tranfer function to the map to get color
+          color_impact_map(
+            cityImagePixels,
+            colorCityFilename,
+            cityMap
+          )
+
+        for valueImpact in range(minValueImpact, maxValueImpact + 1, 10):
+          colorImpactFilename = colorImpactFilenameStart + "BS_" + str(brushSize) + "_IV_" + str(valueImpact) + "_" + colorMapsNames[colorMapIndex] + extension
+
+          # Normalize to the transfer funciton range
+          normalization = mpl.colors.Normalize(vmin=0, vmax=valueImpact)
+          impactMap = cm.ScalarMappable(norm=normalization, cmap=colorMaps[colorMapIndex])
+
+          # Apply a tranfer function to the map to get color
+          color_impact_map(
+            impactImagePixels,
+            colorImpactFilename,
+            impactMap
+          )
 
   print("--- %s seconds ---" % (time.time() - start_time))
-  sys.stdout.flush()
 
 
 # Impactors 2004 MN4: 88, 218, 372, 426, 498, 733, 738, 881, 893, 949, 993
