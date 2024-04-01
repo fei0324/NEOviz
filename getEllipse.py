@@ -578,7 +578,13 @@ def getTextureCoordinates(c_2d, sampled_x, sampled_y, transformed_2d_x, transfor
         return sampled_u_percent, sampled_v_percent, img_mat
 
 
-def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None):
+def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None,):
+    
+    """
+    Save tube data to JSON
+    starting_time_index: the starting time step index of the tube, if it is not 0.
+    """
+    
     data_dict = {"version": {"major": 0, "minor": 1},
                  "texture-channels": ["density", "time-delta"],
                  "polygons": []}
@@ -599,7 +605,10 @@ def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_l
                                        "y": c_3d_t_meters[1],
                                        "z": c_3d_t_meters[2]}
         
-        data_dict["polygons"][t]["texture"] = str(t) + ".png"
+        if starting_time_index is not None:
+            data_dict["polygons"][t]["texture"] = str(t + starting_time_index) + ".png"
+        else:
+            data_dict["polygons"][t]["texture"] = str(t) + ".png"
         
         if sampled_pt_vals_all is not None:
             sampled_pt_val_t = sampled_pt_vals_all[t]
@@ -623,7 +632,11 @@ def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_l
             img_mat_t = img_mat_all_list[t]  # (res, res, 3)
             img_dir = os.path.join(out_dir, "textures")
             os.makedirs(img_dir, exist_ok=True)
-            img_name = str(t) + ".png"
+
+            if starting_time_index is not None:
+                img_name = str(t + starting_time_index) + ".png"
+            else:
+                img_name = str(t) + ".png"
             img_path = os.path.join(img_dir, img_name)
             # fig = plt.figure()
             plt.imshow(img_mat_t, interpolation="spline16")
@@ -690,7 +703,7 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
 
     variants_coords_list = []
     variants_velo_list = []
-    # variants_coords and variants_velo are ordered per asteroid through all time steps
+    # variants_coords and variants_velo are ordered per orbit through all time steps
     # to make an ellipse slice, we need all orbits at time i
     for i in range(num_time_steps):
         variants_coords_list.append(variants_coords[i::num_time_steps])
@@ -711,7 +724,7 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
     sampled_v_all = []
 
     # for Apophis analysis
-    # transformed_2d_all = []
+    transformed_2d_all = []
 
     # make directory to save the texture coordinates
     img_dir = os.path.join(out_dir, "textures")
@@ -723,9 +736,10 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
 
     for i in range(num_time_steps):
         print("time step", i)
+        print(time_arr[i])
 
         # for Apophis analysis
-        # if i < 8800:
+        # if i < 8870:
         #     continue
         # if i >= 9000:
         #     break
@@ -769,16 +783,17 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             print("x_3d shape", x_3d.shape)
 
             # Fig 1 (3d): plot unit vector vec_csun
-            ax.quiver(c_3d[0], c_3d[1], c_3d[2], vec_csun[0], vec_csun[1], vec_csun[2], color='red')
+            # ax.quiver(c_3d[0], c_3d[1], c_3d[2], vec_csun[0], vec_csun[1], vec_csun[2], color='red')
 
             # Fig 1 (3d): plot the unit vector of nss
-            ax.quiver(c_3d[0], c_3d[1], c_3d[2], nss[0], nss[1], nss[2], color='darkorchid')
+            # ax.quiver(c_3d[0], c_3d[1], c_3d[2], nss[0], nss[1], nss[2], color='darkorchid')
 
             # Fig 1 (3d): plot n_3d and the plane
-            xr = np.linspace(c_3d[0] - 1e-08, c_3d[0] + 1e-08, num=20)
-            yr = np.linspace(c_3d[1] - 1e-08, c_3d[1] + 1e-08, num=20)
+            xr = np.linspace(c_3d[0] - 3e-08, c_3d[0] + 3e-08, num=20)
+            yr = np.linspace(c_3d[1] - 3e-08, c_3d[1] + 3e-08, num=20)
             xx, yy, pz = computePlane(n_3d, c_3d, xr, yr)
-            ax.plot_surface(xx, yy, pz, alpha=0.5)
+            # ax.plot_surface(xx, yy, pz, color="green", alpha=0.5)
+            ax.quiver(c_3d[0], c_3d[1], c_3d[2], n_3d[0], n_3d[1], n_3d[2], color='green')
             ax.set_aspect('equal')
         
             # Fig 1 (3d): plot orbit plane intersection points on the plan
@@ -791,8 +806,8 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             m, proj_m = _getMonPlane(n_3d, vec_csun, nss)
 
             # Fig 1 (3d): plot m and proj_m from the c_3d
-            ax.quiver(c_3d[0], c_3d[1], c_3d[2], m[0], m[1], m[2], color='gold')
-            ax.quiver(c_3d[0], c_3d[1], c_3d[2], proj_m[0], proj_m[1], proj_m[2], color='gold')
+            # ax.quiver(c_3d[0], c_3d[1], c_3d[2], m[0], m[1], m[2], color='gold')
+            ax.quiver(c_3d[0], c_3d[1], c_3d[2], proj_m[0], proj_m[1], proj_m[2], color='tab:orange')
             plt.show()
 
         # Note that the intersection points are on a 3d plane
@@ -842,7 +857,7 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             transformedY = transformed_points[1, :]
             transformedZ = transformed_points[2, :]
             ax.scatter(transformedX, transformedY, transformedZ)
-            ax.set_aspect('equal')  # super important: ensures consistent scale for the axes!!!
+            # ax.set_aspect('equal')  # super important: ensures consistent scale for the axes!!!
 
             # Fig 2 (3d): plot the center of the ellipse
             ax.scatter(c_2d[0], c_2d[1], 0, s=50, c="red")
@@ -858,7 +873,7 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             # TODO: Not sure why sometimes the rotated_c_mp_2d is on the other size of the ellipse
 
             # Fig 2 (3d): plot mp_2d and c_mp_2d
-            ax.quiver(c_2d[0], c_2d[1], 0, c_mp_2d[0], c_mp_2d[1], c_mp_2d[2], color="gold")
+            ax.quiver(c_2d[0], c_2d[1], 0, c_mp_2d[0], c_mp_2d[1], c_mp_2d[2], color="tab:orange")
             plt.show()
 
             # Fig 3 (2d): plot a 2D version of the problem, points and min ellipse and c_2d
@@ -866,32 +881,35 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             ax = fig.add_subplot()
             # transformed_2d_x = transformed_2d[0, :]
             # transformed_2d_y = transformed_2d[1, :]
-            ax.scatter(c_2d[0], c_2d[1], s=50, c='red')
+            # ax.scatter(c_2d[0], c_2d[1], s=50, c='red')
             ax.scatter(transformed_2d_x, transformed_2d_y)
             plot_ellipse(H_2d, c_2d, ax=ax)
 
             # Fig 3 (2d): plot c_mp_2d
-            ax.quiver(c_2d[0], c_2d[1], c_mp_2d[0], c_mp_2d[1], scale=2, color="gold")
+            ax.quiver(c_2d[0], c_2d[1], c_mp_2d[0], c_mp_2d[1], scale=1, width=0.02, color="tab:orange")
 
             # Fig 3 (2d): plot rotated_c_mp_2d and the ellipse without rotation
-            ax.quiver(c_2d[0], c_2d[1], rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=2, color="limegreen")
-            kwrg = {'facecolor': 'none', 'edgecolor':'darkgray', 'alpha':1, 'linewidth':2}
+            ax.quiver(c_2d[0], c_2d[1], rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=1, width=0.02, color="tab:pink")
+            kwrg = {'facecolor': 'none', 'edgecolor':'tab:pink', 'alpha':1, 'linewidth':2}
             ellip = Ellipse(xy=c_2d, width=2*a, height=2*b, angle=0, **kwrg)
             ax.set_aspect('equal')
+            plt.xticks([])
+            plt.yticks([])
+            ax.axis("off")
             ax.add_artist(ellip)
             plt.show()
 
             # Fig 4 (2d): plot the rotated array and the ellipse at the origin
             fig = plt.figure()
             ax = fig.add_subplot()
-            kwrg = {'facecolor': 'none', 'edgecolor':'darkgray', 'alpha':1, 'linewidth':2}
+            kwrg = {'facecolor': 'none', 'edgecolor':'gray', 'alpha':1, 'linewidth':2}
             ellip_origin = Ellipse(xy=np.array([0, 0]), width=2*a, height=2*b, angle=0, **kwrg)
             ax.set_aspect('equal')
             ax.add_artist(ellip_origin)
             ax.relim()
             ax.autoscale_view()
 
-            ax.quiver(0, 0, rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=0.3, color="limegreen")
+            ax.quiver(0, 0, rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=0.3, color="gray")
         
             # Fig 4 (2d): plot the intersection point
             ax.scatter(elli_r_o[0], elli_r_o[1])
@@ -926,18 +944,26 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             ax.set_aspect('equal')
             ax.scatter(x_elli_2d, y_elli_2d, alpha=0.5, color="forestgreen")
             # plot the first and the last points
-            ax.scatter(x_elli_2d[0], y_elli_2d[0], alpha=0.5, color="orange")
-            ax.scatter(x_elli_2d[1], y_elli_2d[1], alpha=0.5, color="blue")
-            ax.scatter(x_elli_2d[-1], y_elli_2d[-1], alpha=0.5, color="crimson")
+            ax.scatter(x_elli_2d[0], y_elli_2d[0], alpha=0.5, color="tab:pink")
+            # ax.scatter(x_elli_2d[1], y_elli_2d[1], alpha=0.5, color="blue")
+            # ax.scatter(x_elli_2d[-1], y_elli_2d[-1], alpha=0.5, color="crimson")
+            ax.quiver(0, 0, rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=0.8, width=0.05, color="tab:pink")
+            ax.axis("off")
+            plt.xticks([])
+            plt.yticks([])
             plt.show()
 
             # Fig 5.5 (2d): plot the sampled points colored by the number of original points assigned to each sample point
             fig = plt.figure()
             ax = fig.add_subplot()
             ax.set_aspect('equal')
-            ax.scatter(x_elli_2d, y_elli_2d, c=sampled_pt_vals, cmap="magma_r")
+            s = ax.scatter(x_elli_2d, y_elli_2d, c=sampled_pt_vals, cmap="magma_r")
             for i, val in enumerate(sampled_pt_vals):
                 ax.annotate(val, (x_elli_2d[i], y_elli_2d[i]))
+            ax.axis("off")
+            plt.xticks([])
+            plt.yticks([])
+            fig.colorbar(s, ax=ax, cmap="magma_r", orientation='vertical')
             plt.show()
 
             # Fig 6 (2d): Plot the original ellipse centered at c_2d and the sampled points centered at c_2d
@@ -958,10 +984,10 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             # Fig 7 (3d): plot the original points in 3d and the sampled ellipse in 3d
             fig = plt.figure()
             ax = fig.add_subplot(projection="3d")
-            ax.set_aspect('equal')
-            ax.scatter(sampled_pts_3d[0], sampled_pts_3d[1], sampled_pts_3d[2], color="orange")
-            ax.scatter(Xi[0, :], Xi[1, :], Xi[2, :], color="blue")
+            ax.scatter(sampled_pts_3d[0], sampled_pts_3d[1], sampled_pts_3d[2], color="tab:orange")
+            ax.scatter(Xi[0, :], Xi[1, :], Xi[2, :], color="tab:blue")
             ax.scatter(c_3d[0], c_3d[1], c_3d[2], s=50, color="red")
+            ax.set_aspect('equal')
             plt.show()
 
             # fig 8: plot the texture coordinates
@@ -979,15 +1005,16 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
         sampled_v_all.append(sampled_v)
 
         # for Apophis analysis
-        # transformed_2d_all.append(transformed_2d)
+        transformed_2d_all.append(transformed_2d)
         # print(len(transformed_2d_all))
+
         if sectioned_uncertainty is True:
             img_mat_all.append(img_mat)
     
     # save transformed_2d points for Apophis analysis
-    # print("Saving transformed 2d points")
-    # transformed_2d_f = os.path.join(out_dir, "ori_points_2d")
-    # np.save(transformed_2d_f, transformed_2d_all)
+    print("Saving transformed 2d points")
+    transformed_2d_f = os.path.join(out_dir, "ori_points_2d")
+    np.save(transformed_2d_f, transformed_2d_all)
     # time_arr = time_arr[8800:9000]
             
     if sectioned_uncertainty is True:
@@ -998,6 +1025,19 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
 
 if __name__ == "__main__":
 
+    # For figures...
+    input_dir = "../adam_core/dynamic_uncertainty/2012 DA14/2013-02-10T04.54.49.000/"
+    out_dir = "./sampled_data/dynamic_uncertainty/2012 DA14/for_figures/"
+    os.makedirs(out_dir, exist_ok=True)
+    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
+
+    # Increase Apophis resolution...
+    # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
+    # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
+    # os.makedirs(out_dir, exist_ok=True)
+    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+
     # For 2023 CX1 (impact corridor)...
     # input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
     # out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
@@ -1006,18 +1046,18 @@ if __name__ == "__main__":
     # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For Apophis...
-    # input_dir = "../adam_core/impact_corridor/2004 MN4/2005-06-17T11.50.15.000/"
-    # out_dir = "./sampled_data/impact_corridor/2004 MN4/2005-06-17T11.50.15.000/"
+    # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
+    # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/"
+    # os.makedirs(out_dir, exist_ok=True)
+    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all, starting_time_index=8800)
+
+    # For Apophis subtube...
+    # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
+    # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # os.makedirs(out_dir, exist_ok=True)
     # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
     # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
-
-    # For Apophis subtube...
-    input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/subtube_0/"
-    out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/subtube_0/"
-    os.makedirs(out_dir, exist_ok=True)
-    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For dynamic uncertainty (nested tube)...
     # input_path = "../adam_core/dynamic_uncertainty/2012 DA14/"
