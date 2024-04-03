@@ -130,7 +130,7 @@ def raw_impact_map(
 
       print("Variant", variant_name, "impacts Earth on", impactTime)
       #print("position", position)
-      sys.stdout.flush()
+      #sys.stdout.flush()
       impactorsList.append(variant_name)
       impact = True
 
@@ -138,7 +138,7 @@ def raw_impact_map(
       [alt, long, lat] = spice.reclat(position)
       latDeg = math.degrees(lat)
       longDeg = math.degrees(long)
-      #print("coord:", latDeg, longDeg)
+      print("coord:", latDeg, longDeg)
       #sys.stdout.flush()
 
       # Flip the y axis for the image, north is up
@@ -151,8 +151,8 @@ def raw_impact_map(
       # Find corresponding pixel in equirectangular texture
       pixelY = round(pixelLat * IMAGE_HEIGHT)
       pixelX = round(pixelLong * IMAGE_WIDTH)
-      #print("pixel", pixelX, pixelY)
-      #sys.stdout.flush()
+      print("pixel", pixelX, pixelY)
+      sys.stdout.flush()
 
       # Get color of night image, sample an area around the pixel and add up the color
       # +1 in loop since range is [a, b[
@@ -176,6 +176,8 @@ def raw_impact_map(
 
       # Normaize the color
       nightValue = round(nightValue / (brushSize * brushSize))
+      nightValue *= 1.8
+      nightValue = round(np.clip(round(nightValue), 0, 255))
       #print("resulting night value", nightValue)
       #sys.stdout.flush()
 
@@ -257,11 +259,11 @@ if __name__ == "__main__":
   nightPixels = nightImage.load()
 
   # Time range
-  # 2023 CX1: start "2023-02-13T02:39:00.000", end "2023-02-13T02:59:00.000"
+  # 2023 CX1: start "2023-02-13T02:39:00.000", end "2023-02-13T03:40:00.000"
   # 2004 MN4: start "2029-02-01", end "2029-08-17"
   # 2012 DA14: start "2012-03-06", end "2013-09-30"
   dataStartList = ["2023-02-13T02:39:00.000", "2029-02-01", "2012-03-06"]
-  dataEndList = ["2023-02-13T02:59:00.000", "2029-08-17", "2013-09-30"]
+  dataEndList = ["2023-02-13T03:39:00.000", "2029-08-17", "2013-09-30"]
   timeStart = spice.str2et(dataStartList[dataItem])
   timeEnd = spice.str2et(dataEndList[dataItem])
 
@@ -274,9 +276,9 @@ if __name__ == "__main__":
   colorImpactFilenameStart = "images/impact-color-" + dataNames[dataItem]
 
   # Settings
-  brushSize = 15
-  maxValueCity = 30
-  maxValueImpact = 150
+  brushSize = 20
+  maxValueCity = 15
+  maxValueImpact = 100
 
   cityFilename = cityFilenameStart + "-BS_" + str(brushSize) + extension
   impactFilename = impactFilenameStart + "-BS_" + str(brushSize) + extension
@@ -312,7 +314,7 @@ if __name__ == "__main__":
   # Colormap settings
   colorMaps = [cm.viridis, cm.plasma, cm.inferno, cm.magma, cm.cividis]
   colorMapsNames = ["viridis", "plasma", "inferno", "magma", "cividis"]
-  colorMapIndex = 1
+  colorMapIndex = 2
 
   colorCityFilename = colorCityFilenameStart + "-BS_" + str(brushSize) + "_CV_" + str(maxValueCity) + "_" + colorMapsNames[colorMapIndex] + extension
   colorImpactFilename = colorImpactFilenameStart + "-BS_" + str(brushSize) + "_IV_" + str(maxValueImpact) + "_" + colorMapsNames[colorMapIndex] + extension
