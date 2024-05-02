@@ -23,7 +23,7 @@ Important python dependencies:
  - [astropy](https://www.astropy.org/)
 
 The code uses [SPICE kernels](https://naif.jpl.nasa.gov/naif/data.html) for many computations. The file `/src/getsta.tm` details the three generic kernels we used. You need to visit the [Generic Kernels](https://naif.jpl.nasa.gov/naif/data_generic.html) on the SPICE website, download each of the text files, and create the file structure as described in the `KERNEL_TO_LOAD` section in the `/src/getsta.tm` file.
-The code then loads the SPICE data for later use. In general, if you want to learn about what data contained in each kernel file, read the `aareadme.txt` files in each directory on the SPICE website. 
+The code then loads the SPICE data for later use. In general, if you want to learn more about the data contained in each kernel file, read the `aareadme.txt` files in each directory on the SPICE website. 
 
 For orbit propagation (the /apophis_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. You can run the following:
 
