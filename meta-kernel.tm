@@ -9,6 +9,7 @@ KPL/MK
    --------------------------  -----------------------------
    naif00012.tls.pc            Generic LSK
    de432s.bsp                  Solar System Ephemeris
+   pck00011.tpc                Generic text PCK
 
    \begindata
    KERNELS_TO_LOAD = ( 'kernels/lsk/naif0012.tls.pc',
