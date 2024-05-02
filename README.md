@@ -4,7 +4,8 @@ NEOviz is an interactive visualization system that uses the software [OpenSpace]
 
 The implementation is described in "NEOviz: Uncertainty-Driven Visual Analysis of Asteroid Trajectories" (under review). This project is a collaboration between the [Immersive Visualization](https://immvis.github.io/) group at Linköping University in Sweden and the [B612 Foundation](https://b612foundation.org/).
 
-[![License](https://img.shields.io/badge/License-MIT-purple.svg?style=flat-square)](LICENSE)
+[![python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
 <!-- [![System Paper](https://img.shields.io/badge/System%20Paper-10.1109%2FTVCG.2019.2934259-blue?style=flat-square)]() -->
 
