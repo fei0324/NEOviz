@@ -10,10 +10,33 @@ The implementation is described in "NEOviz: Uncertainty-Driven Visual Analysis o
 <!-- [![System Paper](https://img.shields.io/badge/System%20Paper-10.1109%2FTVCG.2019.2934259-blue?style=flat-square)]() -->
 
 ## Installation
-For the uncertainty tube computation and analysis (the /src directory), the code is tested with Python 3.11 and Windows-64. You can download or clone the repository and run the following,
 
+For orbit propagation (the /orbit_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. You can download or clone the repository and install the required packages. If you use `conda`, a fresh environment can be created as followws: 
+
+```shell
+conda create -n propagate_obits_py311 python=3.11
+conda activate propagate_orbits_py11
+pip install -r requirements-linux.txt
 ```
-$ pip install -r requirements.txt
+
+To be able to propagate orbits, you will need to install PYOORB via conda:
+```shell
+conda install -c conda-forge openorb
+```
+
+Other important python dependencies:
+ - [pandas](https://pandas.pydata.org/)
+ - [adam_core](https://b612.ai/opensource/adam_core/)
+ - [mpcq](https://github.com/B612-Asteroid-Institute/mpcq)
+ - [astropy](https://www.astropy.org/)
+ - [pyarrow](https://pypi.org/project/pyarrow/)
+ - [quivr](https://pypi.org/project/quivr/)
+
+
+For the uncertainty tube computation and analysis (the /src directory), the code is tested with Python 3.11 and Windows-64. 
+
+```shell
+pip install -r requirements.txt
 ```
 
 Important python dependencies:
@@ -24,20 +47,6 @@ Important python dependencies:
 
 The code uses [SPICE kernels](https://naif.jpl.nasa.gov/naif/data.html) for many computations. The file `/src/meta-kernel.tm` details the three generic kernels we used. You need to visit the [Generic Kernels](https://naif.jpl.nasa.gov/naif/data_generic.html) on the SPICE website, download each of the text files, and create the file structure as described in the `KERNEL_TO_LOAD` section in the `/src/meta-kernel.tm` file.
 The code then loads the SPICE data for later use. In general, if you want to learn more about the data contained in each kernel file, read the `aareadme.txt` files in each directory on the SPICE website. 
-
-For orbit propagation (the /apophis_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. You can run the following:
-
-```
-$ pip install -r requirements-linux.txt
-```
-
-Important python dependencies:
- - [pandas](https://pandas.pydata.org/)
- - [adam_core](https://b612.ai/opensource/adam_core/)
- - [mpcq](https://github.com/B612-Asteroid-Institute/mpcq)
- - [astropy](https://www.astropy.org/)
- - [pyarrow](https://pypi.org/project/pyarrow/)
- - [quivr](https://pypi.org/project/quivr/)
 
 
 
