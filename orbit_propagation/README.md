@@ -3,7 +3,7 @@ The `mpc_data` folder contains the object's observations and submission history.
 
 The `orbit_fits` folder contains the calcaulated orbits and the associated covariance matrix based on the given observations.
 
-The difference between _Sectioned Uncertainty_ and _Historical Uncertaint_ is illustrated in the figure below. Please refer to the paper for a more detailed description.
+We use the data in the above folders to sample orbit variants and propagate them over time. The difference between _Sectioned Uncertainty_ and _Historical Uncertainty_ is illustrated in the figure below. Please refer to the paper for a more detailed description.
 ![uncertainty](system-data.pdf)
 
 ### Objects of Interest
