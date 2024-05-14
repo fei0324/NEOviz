@@ -47,6 +47,7 @@ python historical_uncertainty.py
 The object in this example is the imminent impactor 2023 CX1. We sample 10000 starting points from the submission at 2023-02-13T02.38.19.001 and propagate forward to 2023-02-13T03:40:00.000. We output 10000 orbit variants.
 
 We save the files in the following structure.
+```
 .
 └── orbit_propagation/
     └── impact_corridor/
@@ -57,6 +58,7 @@ We save the files in the following structure.
                 ├── times_isot.npy
                 ├── variants_coords_10000.npy
                 └── variants_velo_10000.npy
+```
 
 + `times_isot.npy` is the list of times we used for the propagation. These time steps correspond to the ellipse slices in the uncertainty tube.
 + `variants_coords_[number of samples].npy` is the coordinates of the orbit variants.
