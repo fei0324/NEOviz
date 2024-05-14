@@ -61,15 +61,15 @@ python getEllipse.py
 We output the following file struture:
 
 ```
-.\
-└── sampled_data/\
-    └── impact_corridor/\
-        └── 2023 CX1/\
-            └── 2023-02-13T02.38.19.001/\
-                ├── textures/\
-                │   ├── 0.png\
-                │   ├── 1.png\
-                │   └── ...\
+.
+└── sampled_data/
+    └── impact_corridor/
+        └── 2023 CX1/
+            └── 2023-02-13T02.38.19.001/
+                ├── textures/
+                │   ├── 0.png
+                │   ├── 1.png
+                │   └── ...
                 └── tube_data.json
 ```
 
