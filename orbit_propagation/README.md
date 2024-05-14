@@ -6,7 +6,7 @@ The `mpc_data` and `orbit_fits` directories contain data that we received from o
 
 We use the data in the above folders to sample orbit variants and propagate them over time. The difference between _Sectioned Uncertainty_ and _Historical Uncertainty_ is illustrated in the figure below. Please refer to the paper for a more detailed description.
 ![uncertainty](system-data.png)
-<img src="system-data.png", width=200>
+<img src="system-data.png", width=200/>
 
 We used the historical uncertainty representation for the Apophis and 2023 CX1 exmaples. For 2012 DA14, we used the sectioned uncertainty representation.
 
