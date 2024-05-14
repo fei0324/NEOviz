@@ -11,7 +11,7 @@ The implementation is described in "NEOviz: Uncertainty-Driven Visual Analysis o
 
 ## Installation
 
-For orbit propagation (the /orbit_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. You can download or clone the repository and install the required packages. If you use `conda`, a fresh environment can be created as followws: 
+For orbit propagation (the /orbit_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. Note that some of the dependencies of `adam_core` are currently only available on Linux, so a Linux distribution is highly recommended for this part of the computation. You can download or clone the repository and install the required packages. If you use `conda`, a fresh environment can be created as follows: 
 
 ```shell
 conda create -n propagate_obits_py311 python=3.11

@@ -197,11 +197,9 @@ def getSectionedOrbits(out_dir, submissions, orbits, custom_end_time, num_sample
 
 
 if __name__ == "__main__":
-    # os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 
-    # object_id = "2012 DA14"
+    object_id = "2012 DA14"
     # object_id = "1998 SG172"
-    object_id = "2023 CX1"
     orbit_fits_dir = os.path.join("orbit_fits", object_id)
     submissions_dir = os.path.join("mpc_data", object_id)
     out_dir = os.path.join("sectioned_uncertainty", object_id)

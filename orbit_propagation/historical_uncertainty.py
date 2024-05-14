@@ -35,7 +35,7 @@ def getAdaptiveTimeSteps(submission_interval):
         num_t_steps = round(submission_interval) + 1
 
     # the propagation does not work if the number of time steps is less than 16
-    num_t_steps = max(20, num_t_steps)
+    num_t_steps = max(80, num_t_steps)
 
     return num_t_steps
 
@@ -182,14 +182,17 @@ def getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custo
         propagated_variants_i.to_parquet(propagated_variants_i_file)
  
         # create_openspace_assets(orbits_at_submission, os.path.join(submission_out_dir, "openspace_orbit"), color="blue")
-        create_kernels(propagated_variants, os.path.join(submission_out_dir, "openspace_variants"))
+        # uncomment if you want to create and save kernel files (.bsp)
+        # create_kernels(propagated_variants, os.path.join(submission_out_dir, "openspace_variants"))
     
     return
 
 
 if __name__ == "__main__":
 
-    object_id = "2004 MN4"
+    # object_id = "2004 MN4"
+    object_id = "2023 CX1"
+
     orbit_fits_dir = os.path.join("./orbit_fits", object_id)
     submissions_dir = os.path.join("./mpc_data", object_id)
     out_dir = os.path.join("impact_corridor", object_id)
@@ -202,14 +205,26 @@ if __name__ == "__main__":
 
     orbits = FittedOrbits.from_parquet(orbit_file)
     submissions = pd.read_parquet(submissions_file)
+    print(submissions)
 
     num_samples = 10000
 
+    """
+    The custom_start_time, custom_end_time, and break_time variables are set to achieve the effect of historical uncertainty.
+    We start propagation from the submission time between "custom_start_time" and "break_time" using all historical data before this submission.
+    And we end propagtion at "custom_end_time".
+    """
+
     #### impact corridor Apophis (start propagating from the last submission on 2004-12-27)
-    custom_start_time = Time("2004-12-27T21:00:00.000", format="isot")
-    custom_end_time = Time("2029-12-31T00:00:00.000", format="isot")
+    # custom_start_time = Time("2004-12-27T21:00:00.000", format="isot")
+    # custom_end_time = Time("2029-12-31T00:00:00.000", format="isot")
     # Only propagate from the submission between custom_start_time and break time (there should only be one)
-    break_time = Time("2004-12-28T00:00:00.000", format="isot")
+    # break_time = Time("2004-12-28T00:00:00.000", format="isot")
+
+    #### impact corridor 2023 CX1
+    custom_start_time = Time("2023-02-13T02:38:00.000", format="isot")
+    custom_end_time = Time("2023-02-13T03:40:00.000", format="isot")
+    break_time = Time("2023-02-13T02:39:00.000", format="isot")
 
     getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custom_end_time, break_time, num_samples)
 
