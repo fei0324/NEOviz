@@ -60,6 +60,7 @@ python getEllipse.py
 ```
 We output the following file struture:
 
+```
 .\
 └── sampled_data/\
     └── impact_corridor/\
@@ -70,6 +71,7 @@ We output the following file struture:
                 │   ├── 1.png\
                 │   └── ...\
                 └── tube_data.json
+```
 
 The textures are images that encode data about the cutplanes of the uncertainty tube. OpenSpace later applies transfer functions onto these textures to display them in the correct locations and scales in space.
 
