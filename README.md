@@ -59,15 +59,16 @@ We use the output of the orbit propagation step and generate the data for the un
 python getEllipse.py
 ```
 We output the following file struture:
-.
-└── sampled_data/
-    └── impact_corridor/
-        └── 2023 CX1/
-            └── 2023-02-13T02.38.19.001/
-                ├── textures/
-                │   ├── 0.png
-                │   ├── 1.png
-                │   └── ...
+
+.\
+└── sampled_data/\
+    └── impact_corridor/\
+        └── 2023 CX1/\
+            └── 2023-02-13T02.38.19.001/\
+                ├── textures/\
+                │   ├── 0.png\
+                │   ├── 1.png\
+                │   └── ...\
                 └── tube_data.json
 
 The textures are images that encode data about the cutplanes of the uncertainty tube. OpenSpace later applies transfer functions onto these textures to display them in the correct locations and scales in space.
