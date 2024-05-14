@@ -88,6 +88,8 @@ The data is then saved into a JSON file.
 
 #### Transform json
 
+#### Impact corridor
+
 
 ## License
 This repository is provided under the [3-Clause BSD License](https://github.com/fei0324/NEOviz/blob/main/LICENSE).
