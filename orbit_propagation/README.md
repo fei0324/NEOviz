@@ -58,7 +58,7 @@ We save the files in the following structure.
                 ├── variants_coords_10000.npy
                 └── variants_velo_10000.npy
 
-+ `times_isot.npy` is the list of times we used for the propagation.
++ `times_isot.npy` is the list of times we used for the propagation. These time steps correspond to the ellipse slices in the uncertainty tube.
 + `variants_coords_[number of samples].npy` is the coordinates of the orbit variants.
 + `variants_velos_[number of samples].npy` is the velocity of the orbit variants.
 

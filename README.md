@@ -46,8 +46,44 @@ Important python dependencies:
  - [astropy](https://www.astropy.org/)
 
 The code uses [SPICE kernels](https://naif.jpl.nasa.gov/naif/data.html) for many computations. The file `/src/meta-kernel.tm` details the three generic kernels we used. You need to visit the [Generic Kernels](https://naif.jpl.nasa.gov/naif/data_generic.html) on the SPICE website, download each of the text files, and create the file structure as described in the `KERNEL_TO_LOAD` section in the `/src/meta-kernel.tm` file.
-The code then loads the SPICE data for later use. In general, if you want to learn more about the data contained in each kernel file, read the `aareadme.txt` files in each directory on the SPICE website. 
+The code then loads the SPICE data for later use. In general, if you want to learn more about the data contained in each kernel file, read the `aareadme.txt` files in each directory on the SPICE website.
 
+## Pipeline
+
+#### Orbit prpagation (linux environment only)
+We start by propagating orbits using submission data. See instructions in the "orbit_propagation" directory.
+
+#### Uncertainty tube data generation
+We use the output of the orbit propagation step and generate the data for the uncertainty tube. We continue with our exmample of the imminent impactor 2023 CX1. Run the following command.
+```shell
+python getEllipse.py
+```
+We output the following file struture:
+.
+└── sampled_data/
+    └── impact_corridor/
+        └── 2023 CX1/
+            └── 2023-02-13T02.38.19.001/
+                ├── textures/
+                │   ├── 0.png
+                │   ├── 1.png
+                │   └── ...
+                └── tube_data.json
+
+The textures are images that encode data about the cutplanes of the uncertainty tube. OpenSpace later applies transfer functions onto these textures to display them in the correct locations and scales in space.
+
+<img src="texture_example.png" width="400"/>
+
+The main function is `getEllipsePerSubmission()` with the following input parameters:
++ variants_dir: the directory of orbit variants from orbit propagation
++ num_sample_ellipse: the number of points we sample from each ellipse cutplane, the default is 50
++ out_dir: output directory
++ sectioned_uncertainty: boolean to determine if we are using the historical (False) or sectioned (True) uncertainty representation
++ plotEllipse: boolean, if True the function will plot the intermediate steps for the computation of each ellipse. It can be useful for debugging purposes.
+
+The data is then saved into a JSON file.
+
+#### Transform json
 
 
 ## License

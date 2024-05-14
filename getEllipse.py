@@ -74,9 +74,12 @@ def computePlaneLineIntersection(n: npt.ArrayLike, c: npt.ArrayLike, lp: npt.Arr
 
 def getTranslationZ(n, c):
     """
-    Get the translation vector so the new plane passes through (0, 0, 0)
+    Get the magnitude of the translation vector so the new plane passes through (0, 0, 0)
     n: normal of the old plane
     c: point on the old plane (center of the ellipsoid)
+
+    Output:
+    z: the translation amount, the translation vector would be (0, 0, z)
     """
     return np.dot(c, n)/n[2]
 
@@ -578,7 +581,7 @@ def getTextureCoordinates(c_2d, sampled_x, sampled_y, transformed_2d_x, transfor
         return sampled_u_percent, sampled_v_percent, img_mat
 
 
-def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None,):
+def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
     
     """
     Save tube data to JSON
@@ -1026,10 +1029,10 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
 if __name__ == "__main__":
 
     # For figures...
-    input_dir = "../adam_core/dynamic_uncertainty/2012 DA14/2013-02-10T04.54.49.000/"
-    out_dir = "./sampled_data/dynamic_uncertainty/2012 DA14/for_figures/"
-    os.makedirs(out_dir, exist_ok=True)
-    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
+    # input_dir = "../adam_core/dynamic_uncertainty/2012 DA14/2013-02-10T04.54.49.000/"
+    # out_dir = "./sampled_data/dynamic_uncertainty/2012 DA14/for_figures/"
+    # os.makedirs(out_dir, exist_ok=True)
+    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
 
     # Increase Apophis resolution...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
@@ -1039,11 +1042,11 @@ if __name__ == "__main__":
     # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For 2023 CX1 (impact corridor)...
-    # input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
-    # out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
-    # os.makedirs(out_dir, exist_ok=True)
-    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
+    out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
+    os.makedirs(out_dir, exist_ok=True)
+    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For Apophis...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
