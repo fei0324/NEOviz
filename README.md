@@ -84,7 +84,7 @@ The main function is `getEllipsePerSubmission()` with the following input parame
 + sectioned_uncertainty: boolean to determine if we are using the historical (False) or sectioned (True) uncertainty representation
 + plotEllipse: boolean, if True the function will plot the intermediate steps for the computation of each ellipse. It can be useful for debugging purposes.
 
-The data is then saved into a JSON file.
+The data is then saved into a JSON file called `tube_data.json`.
 
 #### Transform json
 
