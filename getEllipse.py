@@ -31,7 +31,7 @@ def computeEllipsoid(points: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray, np.
     L = obj["L"]
     c = obj["c"]
     H = L @ L.T
-    
+
     return L, H, c
 
 
@@ -581,7 +581,7 @@ def getTextureCoordinates(c_2d, sampled_x, sampled_y, transformed_2d_x, transfor
         return sampled_u_percent, sampled_v_percent, img_mat
 
 
-def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
+def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
     
     """
     Save tube data to JSON
@@ -607,6 +607,21 @@ def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_l
         data_dict["polygons"][t]["center"] = {"x": c_3d_t_meters[0],
                                        "y": c_3d_t_meters[1],
                                        "z": c_3d_t_meters[2]}
+        
+        data_dict["polygons"][t]["axes-length"] = {"a": axes_length_all[t][0],
+                                                   "b": axes_length_all[t][1],
+                                                   "c": axes_length_all[t][2]}
+        
+        axes_direction_all_t = axes_direction_all[t]
+        data_dict["polygons"][t]["axes-direction"] = {"x1": axes_direction_all_t[0][0],
+                                                      "x2": axes_direction_all_t[0][1],
+                                                      "x3": axes_direction_all_t[0][2],
+                                                      "y1": axes_direction_all_t[1][0],
+                                                      "y2": axes_direction_all_t[1][1],
+                                                      "y3": axes_direction_all_t[1][2],
+                                                      "z1": axes_direction_all_t[2][0],
+                                                      "z2": axes_direction_all_t[2][1],
+                                                      "z3": axes_direction_all_t[2][2]}
         
         if starting_time_index is not None:
             data_dict["polygons"][t]["texture"] = str(t + starting_time_index) + ".png"
@@ -725,6 +740,8 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
     sampled_pt_vals_all = []
     sampled_u_all = []
     sampled_v_all = []
+    axes_length_all = []
+    axes_direction_all = []
 
     # for Apophis analysis
     transformed_2d_all = []
@@ -751,6 +768,15 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
         Xi = variants_coords_list[i].T
         print("Xi shape", Xi.shape)
         L_3d, H_3d, c_3d = computeEllipsoid(Xi)
+        
+        # The eigenvectors of H_3d are the orientation of the semi-axes
+        # Can compute the length of the semi-axes a, b, c from the eigenvalues of H_3d
+        eigenvalues, eigenvectors = np.linalg.eig(H_3d)
+        axes_length = np.sqrt(np.reciprocal(eigenvalues))
+        print(axes_length)
+        print(eigenvectors)
+        axes_length_all.append(axes_length)
+        axes_direction_all.append(eigenvectors)  # columns are the eigenvectors
 
         # Get unit vector from c_3d to the sun -> vec_csun
         vec_csun = np.array([0, 0, 0]) - c_3d
@@ -1021,12 +1047,21 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
     # time_arr = time_arr[8800:9000]
             
     if sectioned_uncertainty is True:
-        return time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, img_mat_all
+        return time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, img_mat_all
     else:
-        return time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all
+        return time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all
 
 
 if __name__ == "__main__":
+
+    # For 2023 CX1 (impact corridor)...
+    input_dir = "./input_data/2023 CX1/2023-02-13T02.38.19.001/"
+    out_dir = "./sampled_data/2023 CX1/2023-02-13T02.38.19.001/"
+    os.makedirs(out_dir, exist_ok=True)
+    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
+    print(time_arr)
+    print(time_lag_all)
+    dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all)
 
     # For figures...
     # input_dir = "../adam_core/dynamic_uncertainty/2012 DA14/2013-02-10T04.54.49.000/"
@@ -1042,11 +1077,11 @@ if __name__ == "__main__":
     # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For 2023 CX1 (impact corridor)...
-    input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
-    out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
-    os.makedirs(out_dir, exist_ok=True)
-    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
+    # out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
+    # os.makedirs(out_dir, exist_ok=True)
+    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For Apophis...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
