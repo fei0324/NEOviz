@@ -13,7 +13,7 @@ from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
 
 from adam_core.orbits import VariantOrbits
-from adam_core.propagator import PYOORB
+from adam_assist import ASSISTPropagator
 
 import ray
 
@@ -46,7 +46,7 @@ def getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custo
     The custom_submission_time and break_time is to control which submission to start the propagation with.
     If there are multiple submissions between custom_submission_time and break_time, we propagate forward from each of them to the custom_end_time
     
-    out_dir: the parent output directory, should be the object id e.g. "uncertainty_changes/2012 DA14/
+    out_dir: the parent output directory, should contain the object id e.g. "uncertainty_changes/2012 DA14/
     submissions: submissions in the mpc_data directory
     orbits: orbits generated from observations in the orbit_fits directory
     custom_start_time: start propagating from the closest submission after the custom start time
@@ -59,7 +59,7 @@ def getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custo
     if not ray.is_initialized():
         ray.init(num_cpus=max_processes)
 
-    propagator = PYOORB()
+    propagator = ASSISTPropagator()
 
     # submission_ids = submissions["id"].values
     submission_times = Time(submissions["timestamp"].values, scale="utc", format="datetime64")
@@ -113,9 +113,9 @@ def getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custo
             covariance=True,
             covariance_method="monte-carlo",
             num_samples=num_samples, 
-            parallel_backend="ray",
             max_processes=max_processes
         )
+        
         # Convert propagated variants to UTC
         orbit_at_submission_i = orbit_at_submission_i.set_column("coordinates.time", orbit_at_submission_i.coordinates.time.rescale("utc"))
         
@@ -146,7 +146,6 @@ def getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custo
             ), 
             propagation_times,
             covariance=False,
-            parallel_backend="ray",
             chunk_size=num_samples//max_processes,
             max_processes=max_processes
         )
@@ -189,43 +188,47 @@ def getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custo
 
 
 if __name__ == "__main__":
-
-    # object_id = "2004 MN4"
-    object_id = "2023 CX1"
-
-    orbit_fits_dir = os.path.join("./orbit_fits", object_id)
-    submissions_dir = os.path.join("./mpc_data", object_id)
-    out_dir = os.path.join("impact_corridor", object_id)
-
-    os.makedirs(out_dir, exist_ok=True)
-
-    orbit_file = os.path.join(orbit_fits_dir, "orbits.parquet")
-    submission_ids_file = os.path.join(orbit_fits_dir, "submission_ids.txt")
-    submissions_file = os.path.join(submissions_dir, "submissions.parquet")
-
-    orbits = FittedOrbits.from_parquet(orbit_file)
-    submissions = pd.read_parquet(submissions_file)
-    print(submissions)
-
-    num_samples = 10000
-
     """
     The custom_start_time, custom_end_time, and break_time variables are set to achieve the effect of historical uncertainty.
     We start propagation from the submission time between "custom_start_time" and "break_time" using all historical data before this submission.
     And we end propagtion at "custom_end_time".
     """
 
+    # Choose object here, only one can be used
     #### impact corridor Apophis (start propagating from the last submission on 2004-12-27)
-    # custom_start_time = Time("2004-12-27T21:00:00.000", format="isot")
-    # custom_end_time = Time("2029-12-31T00:00:00.000", format="isot")
-    # Only propagate from the submission between custom_start_time and break time (there should only be one)
-    # break_time = Time("2004-12-28T00:00:00.000", format="isot")
+    object_id = "2004 MN4"
+    custom_start_time = Time("2004-12-27T21:00:00.000", format="isot")
+    custom_end_time = Time("2029-12-31T00:00:00.000", format="isot")
+    break_time = Time("2004-12-28T00:00:00.000", format="isot")
 
     #### impact corridor 2023 CX1
-    custom_start_time = Time("2023-02-13T02:38:00.000", format="isot")
-    custom_end_time = Time("2023-02-13T03:40:00.000", format="isot")
-    break_time = Time("2023-02-13T02:39:00.000", format="isot")
+    # object_id = "2023 CX1"
+    # custom_start_time = Time("2023-02-13T02:38:00.000", format="isot")
+    # custom_end_time = Time("2023-02-13T03:40:00.000", format="isot")
+    # break_time = Time("2023-02-13T02:39:00.000", format="isot")
 
+    # Setup output input and output directories
+    orbit_fits_dir = os.path.join("./orbit_fits", object_id)
+    submissions_dir = os.path.join("./mpc_data", object_id)
+    out_dir = os.path.join("generated_data/historical", object_id)
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Find the input files
+    orbit_file = os.path.join(orbit_fits_dir, "orbits.parquet")
+    submission_ids_file = os.path.join(orbit_fits_dir, "submission_ids.txt")
+    submissions_file = os.path.join(submissions_dir, "submissions.parquet")
+
+    # TODO: Add graceful errors if some files/directories cannot be found
+
+    # Get the data in the input files
+    orbits = FittedOrbits.from_parquet(orbit_file)
+    submissions = pd.read_parquet(submissions_file)
+    print(submissions)
+
+    # Set the number of samples to use when sampling the uncertainty region
+    num_samples = 10000
+
+    # 
     getDynamicUncertainty(out_dir, submissions, orbits, custom_start_time, custom_end_time, break_time, num_samples)
 
     ################### generate apophis kernels around the bifurcation and potential impact

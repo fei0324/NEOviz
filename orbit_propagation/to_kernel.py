@@ -15,7 +15,7 @@ def create_kernels(
         id_offset=1000000
     ):
 
-    # Create the our directory
+    # Create the out directory
     os.makedirs(out_dir, exist_ok=True)
 
     # Get the list of variants

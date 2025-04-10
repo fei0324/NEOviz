@@ -1055,10 +1055,10 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
 if __name__ == "__main__":
 
     # For 2023 CX1 (impact corridor)...
-    input_dir = "./input_data/2023 CX1/2023-02-13T02.38.19.001/"
-    out_dir = "./sampled_data/2023 CX1/2023-02-13T02.38.19.001/"
+    input_dir = "./orbit_propagation/generated_data/historical/2023 CX1/2023-02-13T02.38.19.001/"
+    out_dir = "./generated_data/2023 CX1/2023-02-13T02.38.19.001/"
     os.makedirs(out_dir, exist_ok=True)
-    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
+    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
     print(time_arr)
     print(time_lag_all)
     dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all)

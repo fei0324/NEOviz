@@ -13,7 +13,7 @@ from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
 
 from adam_core.orbits import VariantOrbits
-from adam_core.propagator import PYOORB
+from adam_assist import ASSISTPropagator
 
 import ray
 
@@ -57,7 +57,7 @@ def getSectionedOrbits(out_dir, submissions, orbits, custom_end_time, num_sample
     if not ray.is_initialized():
         ray.init(num_cpus=max_processes)
 
-    propagator = PYOORB()
+    propagator = ASSISTPropagator()
 
     # submission_ids = submissions["id"].values
     submission_times = Time(submissions["timestamp"].values, scale="utc", format="datetime64")
@@ -119,7 +119,6 @@ def getSectionedOrbits(out_dir, submissions, orbits, custom_end_time, num_sample
             covariance=True,
             covariance_method="monte-carlo",
             num_samples=num_samples, 
-            parallel_backend="ray",
             max_processes=max_processes
         )
         # Convert propagated variants to UTC
@@ -152,7 +151,6 @@ def getSectionedOrbits(out_dir, submissions, orbits, custom_end_time, num_sample
             ), 
             propagation_times,
             covariance=False,
-            parallel_backend="ray",
             chunk_size=num_samples//max_processes,
             max_processes=max_processes
         )
@@ -202,7 +200,7 @@ if __name__ == "__main__":
     # object_id = "1998 SG172"
     orbit_fits_dir = os.path.join("orbit_fits", object_id)
     submissions_dir = os.path.join("mpc_data", object_id)
-    out_dir = os.path.join("sectioned_uncertainty", object_id)
+    out_dir = os.path.join("generated_data/sectioned", object_id)
 
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
