@@ -29,20 +29,20 @@ def createJinjaData(fileContent):
     data = data + "    \"z\": \"" + str(polygon["center"]["z"]) + "\",\n"
 
     # Rotation
-    data = data + "    \"a11\": \"" + str(polygon["rotation"][0]) + "\",\n"
-    data = data + "    \"a12\": \"" + str(polygon["rotation"][1]) + "\",\n"
-    data = data + "    \"a13\": \"" + str(polygon["rotation"][2]) + "\",\n"
-    data = data + "    \"a21\": \"" + str(polygon["rotation"][3]) + "\",\n"
-    data = data + "    \"a22\": \"" + str(polygon["rotation"][4]) + "\",\n"
-    data = data + "    \"a23\": \"" + str(polygon["rotation"][5]) + "\",\n"
-    data = data + "    \"a31\": \"" + str(polygon["rotation"][6]) + "\",\n"
-    data = data + "    \"a32\": \"" + str(polygon["rotation"][7]) + "\",\n"
-    data = data + "    \"a33\": \"" + str(polygon["rotation"][8]) + "\",\n"
+    data = data + "    \"x1\": \"" + str(polygon["axes-direction"]["x1"]) + "\",\n"
+    data = data + "    \"x2\": \"" + str(polygon["axes-direction"]["x2"]) + "\",\n"
+    data = data + "    \"x3\": \"" + str(polygon["axes-direction"]["x3"]) + "\",\n"
+    data = data + "    \"y1\": \"" + str(polygon["axes-direction"]["y1"]) + "\",\n"
+    data = data + "    \"y2\": \"" + str(polygon["axes-direction"]["y2"]) + "\",\n"
+    data = data + "    \"y3\": \"" + str(polygon["axes-direction"]["y3"]) + "\",\n"
+    data = data + "    \"z1\": \"" + str(polygon["axes-direction"]["z1"]) + "\",\n"
+    data = data + "    \"z2\": \"" + str(polygon["axes-direction"]["z2"]) + "\",\n"
+    data = data + "    \"z3\": \"" + str(polygon["axes-direction"]["z3"]) + "\",\n"
 
     # Scale
-    data = data + "    \"a\": \"" + str(polygon["scale"]["a"]) + "\",\n"
-    data = data + "    \"b\": \"" + str(polygon["scale"]["b"]) + "\",\n"
-    data = data + "    \"c\": \"" + str(polygon["scale"]["c"]) + "\"\n"
+    data = data + "    \"a\": \"" + str(polygon["axes-length"]["a"]) + "\",\n"
+    data = data + "    \"b\": \"" + str(polygon["axes-length"]["b"]) + "\",\n"
+    data = data + "    \"c\": \"" + str(polygon["axes-length"]["c"]) + "\"\n"
 
     if isLast:
       data = data + "  }\n"
