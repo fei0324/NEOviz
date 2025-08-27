@@ -14,3 +14,6 @@ transforms-script/hrzData/
 transforms-script/jsonData/
 transforms-script/transformsData/
 transforms-script/transforms/
+choldate/
+generated_data/
+orbit_propagation/generated_data/
