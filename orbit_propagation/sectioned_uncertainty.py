@@ -17,7 +17,7 @@ from adam_assist import ASSISTPropagator
 
 import ray
 
-from to_asset_new import create_openspace_assets
+#from to_asset import create_openspace_assets
 from to_kernel import create_kernels
 
 
