@@ -34,6 +34,7 @@ def getAdaptiveTimeSteps(time_interval):
 
     Return: The number of time steps we use to propagate between two submissions
     """
+
     if time_interval > 1:
         num_steps = math.ceil(time_interval)
     else:
@@ -289,11 +290,11 @@ if __name__ == "__main__":
     # stop_time = Time("2023-02-13T02:39:00.000", format="isot")
 
     # Setup input data directories
-    orbit_fits_dir = os.path.join("./orbit_fits", object_id)
-    submissions_dir = os.path.join("./mpc_data", object_id)
+    orbit_fits_dir = os.path.join("./data/orbit_fits", object_id)
+    submissions_dir = os.path.join("./data/mpc_data", object_id)
     
     # Setup output directories
-    output_dir = os.path.join("generated_data/historical", object_id)
+    output_dir = os.path.join("./generated_data/historical", object_id)
     os.makedirs(output_dir, exist_ok=True)
 
     # Find the input files

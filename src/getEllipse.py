@@ -22,11 +22,12 @@ def computeEllipsoid(points: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray, np.
     Wrapper for the function mvee2(): compute the minimum enclosing ellipsoid from input point cloud
     points: input point cloud in 2d or 3d
     
-    Output
-    L:
-    H: the matrix that represents the ellipsoid
-    c: the center of the ellipsoid
+    Output:
+        L:
+        H: The matrix that represents the ellipsoid
+        c: The center of the ellipsoid
     """
+
     obj = mvee2(points)
     L = obj["L"]
     c = obj["c"]
@@ -37,11 +38,12 @@ def computeEllipsoid(points: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray, np.
 
 def computePlane(n, c, xr, yr):
     """
-    Compute a plane to plot from the normal vector and a point on the plane
-    n: the normal vector which is the average velocity of the orbits
-    c: the center of the ellipse
-    xr: range vector of x
-    yr: range vectr of y
+    Compute a plane from the normal vector and a point on the plane
+    Input:
+        n: The normal vector of the plane
+        c: A point on the plane
+        xr: Range vector of x
+        yr: Range vectr of y
     """
 
     xx, yy = np.meshgrid(xr, yr)
@@ -82,6 +84,7 @@ def getTranslationZ(n, c):
     Output:
     z: the translation amount, the translation vector would be (0, 0, z)
     """
+
     return np.dot(c, n)/n[2]
 
 
@@ -151,6 +154,7 @@ def projectVec2Plane(u, n):
 
     Output: new vector on the plane
     """
+
     return u - (np.dot(u, n)/np.linalg.norm(n)**2)*n
 
 
@@ -163,6 +167,7 @@ def _getMonPlane(n_3d, vec_csun, nss):
     m: the vector perpendicular to vec_csun and nss
     proj_m: m projected onto the plane
     """
+
     m = np.cross(vec_csun, nss)
 
     # check if m is on the right side because we want m to have consistent orientation as the asteroid traverses around its orbit
@@ -208,6 +213,7 @@ def getRotationMat2D(theta):
     rot_theta: rotation matrix by theta
     rot_neg_theta: rotation matrix by negative theta
     """
+
     rot_theta = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
     rot_neg_theta = np.array([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
 
@@ -218,6 +224,7 @@ def getEllipseParam(H_2d):
     """
     Get the parameters for the general ellipse in 2d
     """
+
     s, u = np.linalg.eigh(H_2d)
     idxs = np.argsort(s)
     s, u = s[idxs], u[:, idxs]
@@ -239,6 +246,7 @@ def getRayEllipseIntersection(a, b, ray):
 
     Output: the coordinate of the intersection point
     """
+
     vx, vy = ray[0], ray[1]
     t = 1/np.sqrt((vx/a)**2 + (vy/b)**2)
     intersection_coord = np.array([vx*t, vy*t])
@@ -254,6 +262,7 @@ def getStartingPoint(vec_csun, nss, trans_z, rotate_mat, c_2d, H_2d, c_3d, n_3d)
     rotate_mat: rotation matrix from the original 3d plane to the x-y plane
     H_2d: matrix that describes the ellipse
     """
+
     m = np.cross(vec_csun, nss)
     # print("dot product", np.dot(m, nss))
 
@@ -301,6 +310,7 @@ def angle2phi(angle, a, b):
     x = a*sin(phi), y = a*cos(phi)
     a, b are the semi-major axes radii of the ellipse
     """
+
     # phi = np.arctan2(a*np.tan(angle), b)  # this only gives results from -pi/2 to pi/2 need the whole 2pi
     phi = angle - np.arctan2((b-a)*np.tan(angle), b + a*np.tan(angle)**2)
     
@@ -308,7 +318,9 @@ def angle2phi(angle, a, b):
 
 
 def ellipse_arc(a, b, theta_sample, n):
-    """Cumulative arc length of ellipse with given dimensions"""
+    """
+    Cumulative arc length of ellipse with given dimensions
+    """
 
     # Divide the interval [theta_sample , theta_sample + 2*pi] into n steps at regular angles
     t = np.linspace(theta_sample, theta_sample + 2*np.pi, n)
@@ -336,7 +348,8 @@ def ellipse_arc(a, b, theta_sample, n):
 def theta_from_arc_length_constructor(a, b, theta_sample, precision):
     """
     Inverse arc length function: constructs a function that returns the
-    angle associated with a given cumulative arc length for given ellipse."""
+    angle associated with a given cumulative arc length for given ellipse.
+    """
 
     # Get arc length data for this ellipse
     t, cumulative_distance, total_distance = ellipse_arc(a, b, theta_sample, precision)
@@ -359,6 +372,7 @@ def sampleEllipse2D(a, b, theta_sample=0, sample_size=50, precision=1000):
     n: the number of points to sample
     precision: controls the precision of the arc length calculation.
     """
+
     theta_from_arc_length, domain = theta_from_arc_length_constructor(a, b, theta_sample, precision)
     # sample_size+1 to fix the issue that the first and the last points overlap
     s = np.linspace(0, 1, sample_size+1) * domain
@@ -410,7 +424,7 @@ def transformPts3D(sampled_x: np.array, sampled_y: np.array, c_2d, rot_theta, ro
 
 
 def getSampledPtVals(a, b, c_2d, sampled_x, sampled_y, transformed_2d_x, transformed_2d_y, rot_neg_theta, r=None):
-    
+
     # rotate the original 2d points centered at (0, 0) by neg_theta
     x_shift_ori = np.full(transformed_2d_x.shape, c_2d[0])
     y_shift_ori = np.full(transformed_2d_y.shape, c_2d[1])
@@ -582,8 +596,7 @@ def getTextureCoordinates(c_2d, sampled_x, sampled_y, transformed_2d_x, transfor
         return sampled_u_percent, sampled_v_percent, img_mat
 
 
-def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
-    
+def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_data_list, sampled_u_all_list, sampled_v_all_list, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
     """
     Save tube data to JSON
     starting_time_index: the starting time step index of the tube, if it is not 0.
@@ -601,7 +614,7 @@ def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_l
     # print("t_max", t_max)
     # print("half_range", half_range)
 
-    for t, time_step in enumerate(time_arr_list):
+    for t, time_step in enumerate(time_data_list):
         data_dict["polygons"].append({"time": time_step})
         c_3d_t_meters = c_3d_all_list[t]
         c_3d_t_meters *= astrounit.au.to(astrounit.m)
@@ -690,51 +703,67 @@ def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_l
         json.dump(data_dict, fp)
 
 
-
-def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned_uncertainty=True, plotEllipse=False):
+def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, sectioned_uncertainty=True, plotEllipse=False):
     """
     Get the ellipses for orbits from the same submission period
     
-    variants_dir: should end with "/"
+    data_directory: Should end with "/"
     num_sample_ellipse: the number of sample points we get from the circumference of the ellipse
     """
-    # Get positions of astroid w.r.t. the sun for a given time
-    # use adam_core to get the orbit positions at a specific time
-    variants_coord_f = [filename for filename in os.listdir(variants_dir) if filename.startswith("variants_coords_")]
-    variants_velo_f = [filename for filename in os.listdir(variants_dir) if filename.startswith("variants_velo_")]
-    time_f = os.path.join(variants_dir, "times_isot.npy")
-    print(time_f)
-    # There should only be one file of each submission
-    assert len(variants_coord_f) == 1
-    assert len(variants_velo_f) == 1
-    variants_coords = np.load(os.path.join(variants_dir, variants_coord_f[0]))
-    variants_velo = np.load(os.path.join(variants_dir, variants_velo_f[0]))
-    time_arr = np.load(time_f)
-    print(variants_coord_f)
-    print(variants_velo_f)
 
-    num_samples = int(variants_coord_f[0].split("_")[-1].split(".")[0])
-    print("num_samples", num_samples)
-    num_time_steps = len(time_arr)
-    print("num_time_steps")
-    print(num_time_steps)
-    print(variants_coords.shape)
+    # Extract the variants coordinates and velocities files from the given data 
+    # directory. The positions and velocities are given with respect to the Sun.
+    # There should also only be one coordinate and velocity file, if there is more than
+    # one then only the first that is found is considered
+    variants_coordinates_file = ""
+    for filename in os.listdir(data_directory):
+        if filename.startswith("variants_coordinates_"):
+            variants_coordinates_file = filename
+            break
+    print(variants_coordinates_file)
+    
+    variants_velocities_file = ""
+    for filename in os.listdir(data_directory):
+        if filename.startswith("variants_velocity_"):
+            variants_velocities_file = filename
+            break
+    print(variants_velocities_file)
+    
+    # Get the time file from the directory. All variants use the same timesteps
+    time_f = os.path.join(data_directory, "times_isot.npy")
+    time_data = np.load(time_f)
 
-    variants_coords_list = []
-    variants_velo_list = []
-    # variants_coords and variants_velo are ordered per orbit through all time steps
-    # to make an ellipse slice, we need all orbits at time i
-    for i in range(num_time_steps):
-        variants_coords_list.append(variants_coords[i::num_time_steps])
-        variants_velo_list.append(variants_velo[i::num_time_steps])
-    # for i in range(num_time_steps):
-    #     print(i)
-    #     variants_coords_list.append(variants_coords[i*num_samples:(i+1)*num_samples])
-    #     variants_velo_list.append(variants_velo[i*num_samples:(i+1)*num_samples])
+    # Load the coordinate and velocity data
+    # TODO: How does the data look like? Matrix? Long flat flist? What order of items?
+    variants_coordinates = np.load(
+        os.path.join(data_directory, variants_coordinates_file[0])
+    )
+    variants_velocities = np.load(
+        os.path.join(data_directory, variants_velocities_file[0])
+    )
+    print("Coordinate numpy shape", variants_coordinates.shape)
+    print("Velocity numpy shape", variants_velocities.shape)
+    
+    # Get meta data
+    num_samples = int(variants_coordinates_file[0].split("_")[-1].split(".")[0])
+    num_time_steps = len(time_data)
+    print("Number of samples", num_samples)
+    print("Number of time steps", num_time_steps)
+    
+    # The coordinates and velocities are orderd per orbit in the data, but we want to find
+    # all varaint cooridnates and velocities per timestep to create time-slices
+    timed_variants_coordinates = []
+    ordered_variants_velocities = []
+    for t in range(num_time_steps):
+        # We only take the coordinate or velocity cooresponding to the t:th timestamp
+        # for each orbit
+        timed_variants_coordinates.append(variants_coordinates[t::num_time_steps])
+        ordered_variants_velocities.append(variants_velocities[t::num_time_steps])
 
-    print("length of variants coords list", len(variants_coords_list))
-    print("length of variants coords list [0]", len(variants_coords_list[0]))
-    print(variants_coords_list[0].shape)
+    print("Size of timed_variants_coordinates", len(timed_variants_coordinates))
+    print("Size of timed_variants_coordinates[0]", len(timed_variants_coordinates[0]))
+    print("Shape of timed_variants_coordinates[0]", timed_variants_coordinates[0].shape)
+
     sampled_pts_all = []
     c_3d_all = []
     time_lag_all = []
@@ -743,52 +772,57 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
     sampled_v_all = []
     axes_length_all = []
     axes_direction_all = []
+    img_mat_all = []
 
     # for Apophis analysis
     transformed_2d_all = []
 
-    # make directory to save the texture coordinates
-    img_dir = os.path.join(out_dir, "textures")
+    # Create a directory to store textures
+    texture_dir = os.path.join(out_dir, "textures")
+    os.makedirs(texture_dir, exist_ok = True)        
 
-    if sectioned_uncertainty is True:
-        img_mat_all = []
-    else:
-        os.makedirs(img_dir, exist_ok=True)
+    # Get the normal of the solar system
+    utctime = ["Jan 1, 2015"]
+    nss = getNormalSolarSystem(utctime)
 
-    for i in range(num_time_steps):
-        print("time step", i)
-        print(time_arr[i])
+    for t in range(num_time_steps):
+        print("Time step", t)
+        print("Time data", time_data[t])
 
         # for Apophis analysis
-        # if i < 8870:
+        # if t < 8870:
         #     continue
-        # if i >= 9000:
+        # if t >= 9000:
         #     break
 
         # Compute ellipsoid and center of the ellipsoid using mvee
-        Xi = variants_coords_list[i].T
+        # TODO: Why do we transpose this array? Isnt the first elemet all coordinates for
+        # the first timestep?
+        Xi = timed_variants_coordinates[t].T
         print("Xi shape", Xi.shape)
         L_3d, H_3d, c_3d = computeEllipsoid(Xi)
         
         # The eigenvectors of H_3d are the orientation of the semi-axes
-        # Can compute the length of the semi-axes a, b, c from the eigenvalues of H_3d
         eigenvalues, eigenvectors = np.linalg.eig(H_3d)
-        axes_length = np.sqrt(np.reciprocal(eigenvalues))
-        print(axes_length)
-        print(eigenvectors)
-        axes_length_all.append(axes_length)
-        axes_direction_all.append(eigenvectors)  # columns are the eigenvectors
+
+        # We can compute the length of the semi-axes a, b, and c from the eigenvalues
+        # TODO: Is this math correct? 
+        axes_lengths = np.sqrt(np.reciprocal(eigenvalues))
+        axes_lengths_all.append(axes_lengths)
+        print("Axes lengths", axes_lengths)
+
+        # Store the ellipse rotation. The columns in this matrix is the eigenvectors
+        axes_direction_all.append(eigenvectors)
+        print("Eigenvectors", eigenvectors)
+
+        
 
         # Get unit vector from c_3d to the sun -> vec_csun
         vec_csun = np.array([0, 0, 0]) - c_3d
         vec_csun = vec_csun/np.linalg.norm(vec_csun)
 
-        # Get the normal of the solar system
-        utctime = ["Jan 1, 2015"]
-        nss = getNormalSolarSystem(utctime)
-
         # use the average velocity vector (n_3d) as the normal of the plane
-        Vi = variants_velo_list[i].T
+        Vi = ordered_variants_velocities[i].T
         n_3d = np.mean(Vi, axis=1)
 
         # compute orbit plane intersection points and time lag for all orbits
@@ -960,7 +994,7 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
             sampled_u, sampled_v, img_mat = getTextureCoordinates(c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta, save_textures=False)
         else:
             img_name = str(i) + ".png"
-            sampled_u, sampled_v = getTextureCoordinates(c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta, img_name, img_dir, save_textures=True)
+            sampled_u, sampled_v = getTextureCoordinates(c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta, img_name, texture_dir, save_textures=True)
 
         # Transform the sampled points back to the original 3d space
         sampled_trans_xy, sampled_pts_3d = transformPts3D(x_elli_2d, y_elli_2d, c_2d, rot_theta, rotate_mat, trans_z)
@@ -1045,54 +1079,54 @@ def getEllipsePerSubmission(variants_dir, num_sample_ellipse, out_dir, sectioned
     print("Saving transformed 2d points")
     transformed_2d_f = os.path.join(out_dir, "ori_points_2d")
     np.save(transformed_2d_f, transformed_2d_all)
-    # time_arr = time_arr[8800:9000]
+    # time_data = time_data[8800:9000]
             
     if sectioned_uncertainty is True:
-        return time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, img_mat_all
+        return time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, img_mat_all
     else:
-        return time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all
+        return time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all
 
 
 def main(input_dir, out_dir):
     # For 2023 CX1
-    time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    print(time_arr)
+    time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    print(time_data)
     print(time_lag_all)
-    dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all)
+    dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all)
 
     # For figures...
     # input_dir = "../adam_core/dynamic_uncertainty/2012 DA14/2013-02-10T04.54.49.000/"
     # out_dir = "./sampled_data/dynamic_uncertainty/2012 DA14/for_figures/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
+    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
 
     # Increase Apophis resolution...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For 2023 CX1 (impact corridor)...
     # input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
     # out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For Apophis...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
     # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all, starting_time_index=8800)
+    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all, starting_time_index=8800)
 
     # For Apophis subtube...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For dynamic uncertainty (nested tube)...
     # input_path = "../adam_core/dynamic_uncertainty/2012 DA14/"
@@ -1107,8 +1141,8 @@ def main(input_dir, out_dir):
     #     print(submission_path)
     #     out_dir = os.path.join(out_parent_dir, submission_dir)
     #     os.makedirs(out_dir, exist_ok=True)
-    #     time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(submission_path, 50, out_dir, plotEllipse=False)
-    #     dumpJSON(sampled_pts_all, c_3d_all, time_arr, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    #     time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(submission_path, 50, out_dir, plotEllipse=False)
+    #     dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For sectioned uncertainty...
     # input_path = "../adam_core/sectioned_uncertainty/2012 DA14/"
@@ -1116,7 +1150,7 @@ def main(input_dir, out_dir):
     # input_path = "../adam_core/uncertainty_changes/1998 SG172_2007/"
     # dir_list = os.listdir(input_path)
     # dir_list.sort()
-    # time_arr_list = []
+    # time_data_list = []
     # time_lag_all_list = []
     # sampled_pts_all_list = []
     # c_3d_all_list = []
@@ -1132,8 +1166,8 @@ def main(input_dir, out_dir):
     # for submission_dir in dir_list:
     #     submission_path = os.path.join(input_path, submission_dir) + "/"
     #     print(submission_path)
-    #     time_arr, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, img_mat_all = getEllipsePerSubmission(submission_path, 50, out_dir, sectioned_uncertainty=True, plotEllipse=False)
-    #     time_arr_list += list(time_arr)
+    #     time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, img_mat_all = getEllipsePerSubmission(submission_path, 50, out_dir, sectioned_uncertainty=True, plotEllipse=False)
+    #     time_data_list += list(time_data)
     #     time_lag_all_list += time_lag_all
     #     sampled_pts_all_list += sampled_pts_all
     #     c_3d_all_list += c_3d_all
@@ -1142,7 +1176,7 @@ def main(input_dir, out_dir):
     #     sampled_v_all_list += sampled_v_all
     #     img_mat_all_list += img_mat_all
 
-    # print(len(time_arr_list))
+    # print(len(time_data_list))
     # print(len(time_lag_all_list))
     # print(len(sampled_pts_all_list))
     # print(len(c_3d_all_list))
@@ -1154,4 +1188,4 @@ def main(input_dir, out_dir):
     # # print("time lag range", time_lag_range)
 
     # # out_dir = "./sampled_data/1998 SG172_2007"
-    # dumpJSON(sampled_pts_all_list, c_3d_all_list, time_arr_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all_list, img_mat_all_list)
+    # dumpJSON(sampled_pts_all_list, c_3d_all_list, time_data_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all_list, img_mat_all_list)

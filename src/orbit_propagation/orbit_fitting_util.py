@@ -32,12 +32,13 @@ class FittedOrbits(qv.Table):
             coordinates = self.coordinates,
         )
 
+
 def observations_to_ades(observations, file_out) -> str:
     """
     Writes observations to a reduced MPC ADES file that can be 
     used with find_orb. 
-
     """
+    
     ades = observations.rename(columns={
         "unpacked_provisional_designation": "provID",
         "timestamp": "obsTime",
@@ -71,12 +72,13 @@ def observations_to_ades(observations, file_out) -> str:
 
     return ades.to_csv(file_out, index=False, header=False, sep="|", mode="a")
 
+
 def run_find_orb(observations, out_dir=None):
     """
     Runs find_orb on the given observations and returns the calculated
     orbit and covariance matrix. 
-
     """
+
     assert observations["unpacked_provisional_designation"].nunique() == 1
 
     my_env = os.environ.copy()
@@ -147,8 +149,8 @@ def run_object_observations_by_submission(observations, submissions=None):
     """
     Runs find_orb on the observations for a given object, grouped by
     submission. 
-
     """
+
     fitted_orbits = []
     submission_ids = []
     last_submission = []

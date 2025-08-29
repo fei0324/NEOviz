@@ -35,6 +35,7 @@ def getAdaptiveTimeSteps(submission_interval, max_time=None):
     Return: num_t_stps: the number of time steps we use to propagate between two
             submissions
     """
+
     if submission_interval < 1:
         num_t_steps = 2
     else:
@@ -170,8 +171,8 @@ def getSectionedOrbits(out_dir, submissions, orbits, custom_end_time, num_sample
                 propagated_variants = qv.defragment(propagated_variants)
 
         # Save variant coordinates and velocity vectors
-        variants_coordinates_f = os.path.join(submission_out_dir, "variants_coords_" + str(num_samples))
-        variants_velocity_f = os.path.join(submission_out_dir, "variants_velo_" + str(num_samples))
+        variants_coordinates_f = os.path.join(submission_out_dir, "variants_coordinates_" + str(num_samples))
+        variants_velocity_f = os.path.join(submission_out_dir, "variants_velocity_" + str(num_samples))
         # print(propagated_variants_i.coordinates.r.shape)
         # print(propagated_variants_i.coordinates.v.shape)
         np.save(variants_coordinates_f, propagated_variants_i.coordinates.r)
@@ -199,7 +200,6 @@ def getSectionedOrbits(out_dir, submissions, orbits, custom_end_time, num_sample
 
 
 if __name__ == "__main__":
-
     object_id = "2012 DA14"
     # object_id = "1998 SG172"
     orbit_fits_dir = os.path.join("orbit_fits", object_id)
