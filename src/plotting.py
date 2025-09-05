@@ -1,7 +1,62 @@
-'''
-Plotting functions related to ellipsoids.
-'''
 import matplotlib.pyplot as plt
+
+
+def plotPoints(points):
+    """
+    Plot the given points
+
+    Input:
+        points: A 3D point could of points to plot
+    """
+
+    # Prepare the figure
+    figure = plt.figure()
+    axes = figure.add_subplot(projection = '3d')
+
+    # Seperate the dimensions of the points
+    x_3d = points[0, :]
+    y_3d = points[1, :]
+    z_3d = points[2, :]
+
+
+    axes.scatter(x_3d, y_3d, z_3d)
+    axes.scatter(center[0], center[1], center[2], s = 50)
+
+    # Fig 1 (3d): plot unit vector center_to_ssb
+    # axes.quiver(center[0], center[1], center[2], center_to_ssb[0], center_to_ssb[1], center_to_ssb[2], color='red')
+
+    # Fig 1 (3d): plot the unit vector of ssb_normal
+    # axes.quiver(center[0], center[1], center[2], ssb_normal[0], ssb_normal[1], ssb_normal[2], color='darkorchid')
+
+    # Fig 1 (3d): plot mean_velocity and the plane
+    xr = np.linspace(center[0] - 3e-08, center[0] + 3e-08, num=20)
+    yr = np.linspace(center[1] - 3e-08, center[1] + 3e-08, num=20)
+    xx, yy, pz = computePlane(mean_velocity, center, xr, yr)
+    # axes.plot_surface(xx, yy, pz, color="green", alpha=0.5)
+    axes.quiver(center[0], center[1], center[2], mean_velocity[0], mean_velocity[1], mean_velocity[2], color='green')
+    axes.set_aspect('equal')
+
+    # Fig 1 (3d): plot orbit plane intersection points on the plan
+    intersectX = plane_orbit_intersection[0, :]
+    intersectY = plane_orbit_intersection[1, :]
+    intersectZ = plane_orbit_intersection[2, :]
+    axes.scatter(intersectX, intersectY, intersectZ)
+
+    # (for plotting) get the m vector and the projected m vector
+    m, proj_m = _getMonPlane(mean_velocity, center_to_ssb, ssb_normal)
+
+    # Fig 1 (3d): plot m and proj_m from the center
+    # axes.quiver(center[0], center[1], center[2], m[0], m[1], m[2], color='gold')
+    axes.quiver(center[0], center[1], center[2], proj_m[0], proj_m[1], proj_m[2], color='tab:orange')
+    plt.show()
+
+
+def plotEllipsoid(ellipsoid_matrix):
+    return None
+
+
+def plotEllipse(ellipse_matrix):
+    return None
 
 
 def plot_ellipse(mat, pos=None, ax=None, fc='none', ec=[0,0,0], a=1, lw=2):

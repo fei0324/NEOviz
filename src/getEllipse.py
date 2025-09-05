@@ -12,28 +12,31 @@ from sklearn.metrics.pairwise import pairwise_distances
 from astropy import units as astrounit
 
 from src.plotting import plot_ellipse
-from src.mvee import mvee2
+from src.ext.mvee import mvee2
 
 import spiceypy as spice
 
 
 def computeEllipsoid(points: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Wrapper for the function mvee2(): compute the minimum enclosing ellipsoid from input point cloud
-    points: input point cloud in 2d or 3d
+    Wrapper for the mvee2() function which compute the minimum enclosing ellipsoid from
+    the input point cloud.
+    Input: 
+        points: The input point cloud in 2D or 3D
     
     Output:
         L:
-        H: The matrix that represents the ellipsoid
-        c: The center of the ellipsoid
+        hermitian: The matrix that represents the ellipsoid.
+           A complex Hermitian (conjugate symmetric) or a real symmetric matrix
+        center: The center of the ellipsoid
     """
 
     obj = mvee2(points)
     L = obj["L"]
-    c = obj["c"]
-    H = L @ L.T
+    center = obj["c"]
+    hermitian = L @ L.T
 
-    return L, H, c
+    return L, hermitian, center
 
 
 def computePlane(n, c, xr, yr):
@@ -75,19 +78,6 @@ def computePlaneLineIntersection(n: npt.ArrayLike, c: npt.ArrayLike, lp: npt.Arr
     return t, intersection_coordinate
 
 
-def getTranslationZ(n, c):
-    """
-    Get the magnitude of the translation vector so the new plane passes through (0, 0, 0)
-    n: normal of the old plane
-    c: point on the old plane (center of the ellipsoid)
-
-    Output:
-    z: the translation amount, the translation vector would be (0, 0, z)
-    """
-
-    return np.dot(c, n)/n[2]
-
-
 def getRotationalMatrix(n, k):
     """
     Get the rotational matrix when transforming an old plane to a new plane
@@ -127,7 +117,7 @@ def getNormalSolarSystem(utctime: list[str]):
     utctime: a time stamp used to compute the transformation matrix between the reference frames. Shouln't matter to the computation.
         e.g. ["Jan 1, 2015"]
     Output:
-    nss: normal of the solar system
+    ssb_normal: normal of the solar system
     """
 
     ettime = spice.str2et(utctime[0])
@@ -138,50 +128,51 @@ def getNormalSolarSystem(utctime: list[str]):
                     et=ettime)
     
     # get the z direction of the rf_trans_mat
-    nss = rf_trans_mat[:3, :3] @ np.array([0, 0, 1])
+    ssb_normal = rf_trans_mat[:3, :3] @ np.array([0, 0, 1])
 
     # compute the unit vector
-    nss = nss/np.linalg.norm(nss)
+    ssb_normal = ssb_normal/np.linalg.norm(ssb_normal)
 
-    return nss
+    return ssb_normal
 
 
-def projectVec2Plane(u, n):
+def projectVectorToPlane(vector, normal):
     """
     Projoect a vector onto a plane.
-    u: vector
-    n: normal of the plane
+    Input:
+        vector: The vector to project onto the plane
+        normal: The normal of the plane to project the vector onto
 
-    Output: new vector on the plane
+    Output: The input vector projected onto the input plane
     """
+                    
+    return vector - ((np.dot(vector, normal) / np.dot(normal, normal)) * normal)
 
-    return u - (np.dot(u, n)/np.linalg.norm(n)**2)*n
 
-
-def _getMonPlane(n_3d, vec_csun, nss):
+def _getMonPlane(normal, center_to_ssb, ssb_normal):
     """
     Redundant function used for plotting (Fig 1). Part of getStartingPoint()
-    Get m that is perpendicular to the vec_csun and nss. Then project it onto the plane.
+    Get m that is perpendicular to the center_to_ssb and ssb_normal. Then project it onto the plane.
 
     Output:
-    m: the vector perpendicular to vec_csun and nss
+    m: the vector perpendicular to center_to_ssb and ssb_normal
     proj_m: m projected onto the plane
     """
 
-    m = np.cross(vec_csun, nss)
+    m = np.cross(center_to_ssb, ssb_normal)
 
     # check if m is on the right side because we want m to have consistent orientation as the asteroid traverses around its orbit
-    # here we pick np.dot(m, nss) to always be > 0
-    # if np.dot(m, nss) < 0:
+    # here we pick np.dot(m, ssb_normal) to always be > 0
+    # if np.dot(m, ssb_normal) < 0:
     #     m = -m
 
     # vector m might not be on the plane, project m onto the plane
-    proj_m = projectVec2Plane(m, n_3d)
+    proj_m = projectVectorToPlane(m, normal)
 
     return m, proj_m
 
 
-def _getMP2d(proj_m, c_3d, trans_z, rotate_mat, c_2d):
+def _getMP2d(proj_m, center, translation_z, rotation_matrix, center_2d):
     """
     Redundant function used for plotting (Fig 2 and Fig 3). Part of getStartingPoint()
     Get the transformed point of mp_3d -> mp_2d
@@ -189,52 +180,63 @@ def _getMP2d(proj_m, c_3d, trans_z, rotate_mat, c_2d):
 
     Output:
     mp_2d: point on the x-y plane
-    c_mp_2d: vector from c_2d to mp_2d on the x-y plane
+    c_mp_2d: vector from center_2d to mp_2d on the x-y plane
     """
 
-    # get point mp_3d on the plane using proj_m and c_3d
-    mp_3d = c_3d + proj_m
+    # get point mp_3d on the plane using proj_m and center
+    mp_3d = center + proj_m
 
     # transform mp_3d to the x-y plane
-    mp_2d = rotate_mat @ (mp_3d - np.array([0, 0, trans_z]))
+    mp_2d = rotation_matrix @ (mp_3d - np.array([0, 0, translation_z]))
 
-    # get vector from c_2d to mp_2d
-    c_2d_3 = np.array([c_2d[0], c_2d[1], 0])
-    c_mp_2d = mp_2d - c_2d_3
+    # get vector from center_2d to mp_2d
+    center_2d_3 = np.array([center_2d[0], center_2d[1], 0])
+    c_mp_2d = mp_2d - center_2d_3
 
     return mp_2d, c_mp_2d
 
 
 def getRotationMat2D(theta):
     """
-    Get the rotational matrix in 2d
+    Get a rotational matrix in 2D
     
     Output:
-    rot_theta: rotation matrix by theta
-    rot_neg_theta: rotation matrix by negative theta
+    rotation_theta: rotation matrix by the angle theta
+    neg_rotation_theta: rotation matrix by the negative angle theta
     """
 
-    rot_theta = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-    rot_neg_theta = np.array([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]])
+    rotation_theta = np.array([
+        [np.cos(theta), -np.sin(theta)],
+        [np.sin(theta), np.cos(theta)]
+    ])
+    neg_rotation_theta = np.array([
+        [np.cos(-theta), -np.sin(-theta)],
+        [np.sin(-theta), np.cos(-theta)]
+    ])
 
-    return rot_theta, rot_neg_theta
+    return rotation_theta, neg_rotation_theta
 
 
-def getEllipseParam(H_2d):
+def getEllipseParam(hermitian_2d):
     """
     Get the parameters for the general ellipse in 2d
     """
 
-    s, u = np.linalg.eigh(H_2d)
-    idxs = np.argsort(s)
-    s, u = s[idxs], u[:, idxs]
+    eigenvalues, eigenvectors = np.linalg.eigh(hermitian_2d)
+    # TODO: Do we really want to sort here?
+    idxs = np.argsort(eigenvalues)
+    eigenvalues, eigenvectors = eigenvalues[idxs], eigenvectors[:, idxs]
     
-    # get radii of the ellipse
-    a = np.sqrt(s[0]*2)
-    b = np.sqrt(s[1]*2)
+    # Get the ellipse axes lengths (radius)
+    # TODO: Is the eigenvalue really the size of the ellipse side? Radius or diameter?
+    a = np.sqrt(eigenvalues[0]*2)
+    b = np.sqrt(eigenvalues[1]*2)
 
     # rotation angle for the ellipse
-    theta = np.arctan2(u[1, 0], u[0, 0])
+    # TODO: This is not the angle of the ellipse? We want the angle between (1, 0) or
+    # (0, 1) and the largest of the axes? Or consistently the same axes? DO we get the
+    # same axes everytime from the mvee library?
+    theta = np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0])
 
     return a, b, theta
 
@@ -252,51 +254,104 @@ def getRayEllipseIntersection(a, b, ray):
     intersection_coord = np.array([vx*t, vy*t])
     return intersection_coord
 
-
-def getStartingPoint(vec_csun, nss, trans_z, rotate_mat, c_2d, H_2d, c_3d, n_3d):
+def transformToXYPlane(point, plane_center, plane_normal):
     """
-    Get the starting point to sample from the 2d ellipse centered at the origin
-    vec_csun: vector from c_3d to the sun
-    c_3d: center of the ellipsoid in 3d
-    nss: normal of the solar system
-    rotate_mat: rotation matrix from the original 3d plane to the x-y plane
-    H_2d: matrix that describes the ellipse
+    Transform the input point (or vector) on the plane defined by the given center and normal, to the XY plane with normal
+
+    Input:
+        point: A point (or a vector) on the input plane (or originating on the input
+               plane) to transform onto the XY-plane
+        plane_center: The center point of the ellipse. Or the origin of the input vector
+                      if it is a vector. This point must be part of the input plane.
+        plane_normal: The normal of the input plane
+
+    Output: The transformed point (or vector) on the XY plane
     """
 
-    m = np.cross(vec_csun, nss)
-    # print("dot product", np.dot(m, nss))
+    # Start by translating the point to the origin 
+    translated_point = point - plane_center
+    translated_plane_normal = plane_normal - plane_center
 
-    # check if m is on the right side because we want m to have consistent orientation as the asteroid traverses around its orbit
-    # here we pick np.dot(m, nss) to always be >= 0
-    # if np.dot(m, nss) < 0:
-    #     print("dot product is less than 0")
-    #     print("original m", m)
-    #     m = m
-    #     print("updated m", m)
+    # Then find the rotation matrix to rotate the input plane to the XY plane
+    # with a normal of (0, 0, 1)
 
-    # vector m might not be on the plane, project m onto the plane
-    proj_m = projectVec2Plane(m, n_3d)
+    # Rotation matrix formula:
+    # matrix = [
+    #   [cos(theta) + u1^2*(1 - cos(theta)), u1*u2*(1 - cos(theta)), u2*sin(theta)], 
+    #   [u1*u2*(1 - cos(theta)), cos(theta) + u2^2*(1 - cos(theta)), -u1*sin(theta)],
+    #   [-u2*sin(theta), u1*sin(theta), cos(theta)]    
+    # ]
 
-    # get point mp_3d on the plane using proj_m and c_3d
-    mp_3d = c_3d + proj_m
+    # Where:
+    # translated_plane_normal = (a, b, c)
+    a = translated_plane_normal[0]
+    b = translated_plane_normal[1]
+    c = translated_plane_normal[2]
+
+    # theta is the angle betweeen the translated_plane_normal and the normal of the XY plane
+    # cos(theta) = c/sqrt(a^2+b^2+c^2) -> c/|translated_plane_normal|
+    cos_theta = c/np.linalg.norm(translated_plane_normal)
+
+    # sin(theta) = sqrt((a^2+b^2)/(a^2+b^2+c^2)) -> sqrt(1 - cos(theta)^2)
+    sin_theta = np.sqrt(1 - cos_theta**2)
+
+    # u1 = b/sqrt(a^2+b^2)
+    u1 = b/np.sqrt(a**2 + b**2)
+
+    # u2 = −a/sqrt(a^2+b^2)
+    u2 = -a/np.sqrt(a**2 + b**2)
+
+    # Construct the rotation matrix
+    rotation_matrix = np.array([
+        [cos_theta + u1^2*(1 - cos_theta), u1*u2*(1 - cos_theta), u2*sin_theta], 
+        [u1*u2*(1 - cos_theta), cos_theta + u2^2*(1 - cos_theta), -u1*sin_theta],
+        [-u2*sin_theta, u1*sin_theta, cos_theta] 
+    ])
+
+    return rotation_matrix @ translated_point
+
+
+def getStartingPoint(center_to_ssb, ssb_normal, center_2d, hermitian_2d, center, normal):
+    """
+    Get the starting point to sample from the 2D ellipse centered at the origin
+    Input:
+        center_to_ssb: vector from center to the sun
+        center: center of the ellipsoid in 3D
+        ssb_normal: normal of the solar system
+        rotation_matrix: rotation matrix from the original 3D plane to the x-y plane
+        hermitian_2d: matrix that describes the ellipse
+    Output:
+        rotated_c_mp_2d:
+        elli_r_o:
+    """
+
+    # TODO: This vector creates a right handed coordinate system
+    # It is almost directed in the direction of movement af the asteroid, normal of the ellipse plane
+    center_cross_normal = np.cross(center_to_ssb, ssb_normal)
+
+    # The center_cross_normal vector might not be on the plane, project center_cross_normal onto the plane
+    # TODO: This makes no sense, it is almost the normal of the plane
+    # TODO: Don't we want to project the ssb_normal onto the plane instead? 
+    projected_center_cross_normal = projectVectorToPlane(center_cross_normal, normal)
+
+    # get point mp_3d on the plane using projected_center_cross_normal and center
+    mp_3d = center + projected_center_cross_normal
 
     # transform mp_3d to the x-y plane
-    mp_2d = rotate_mat @ (mp_3d - np.array([0, 0, trans_z]))
-    assert np.isclose(mp_2d[2], 0, rtol=1e-08)
-    mp_2d[2] = 0  # force the z coordinate to be 0
+    mp_2d = transformToXYPlane(mp_3d, center, normal)
 
-    # get vector from c_2d to mp_2d
-    c_mp_2d = mp_2d[:2] - c_2d
+    # get vector from center_2d to mp_2d
+    c_mp_2d = mp_2d[:2] - center_2d
 
     # get 2d ellipse parameters
-    a, b, theta = getEllipseParam(H_2d)
+    a, b, theta = getEllipseParam(hermitian_2d)
     # print("theta", theta)
     # theta_degrees = theta * 180 / np.pi
     # print("theta degrees", theta_degrees)
 
     # rotate mp_2d by -1*theta
-    _, rot_neg_theta = getRotationMat2D(theta)
-    rotated_c_mp_2d = rot_neg_theta @ c_mp_2d[:2]
+    _, neg_rotation_theta = getRotationMat2D(theta)
+    rotated_c_mp_2d = neg_rotation_theta @ c_mp_2d[:2]
 
     # compute intersection point on the 2d ellipse centered at the origin
     elli_r_o = getRayEllipseIntersection(a, b, rotated_c_mp_2d)
@@ -312,6 +367,7 @@ def angle2phi(angle, a, b):
     """
 
     # phi = np.arctan2(a*np.tan(angle), b)  # this only gives results from -pi/2 to pi/2 need the whole 2pi
+    # TODO: No we do not need to whole 2pi, the ellipse is symetrical and it doesnt matter
     phi = angle - np.arctan2((b-a)*np.tan(angle), b + a*np.tan(angle)**2)
     
     return phi
@@ -386,52 +442,52 @@ def sampleEllipse2D(a, b, theta_sample=0, sample_size=50, precision=1000):
     return x, y
 
 
-def transformPts3D(sampled_x: np.array, sampled_y: np.array, c_2d, rot_theta, rotate_mat, trans_z):
+def transformPts3D(sampled_x: np.array, sampled_y: np.array, center_2d, rotation_theta, rotation_matrix, translation_z):
     """
     Transform the sampled points from the 2d ellipse centered at (0, 0) back to the original 3d 
     
     sampled_x, sampled_y: sampled 2d points on the ellipse centered at (0, 0) with no rotation
-    c_2d: center of the ellipse in 2d
-    rot_theta: 2d rotational matrix (to rotate back to the original rotation of the ellipse)
+    center_2d: center of the ellipse in 2d
+    rotation_theta: 2d rotational matrix (to rotate back to the original rotation of the ellipse)
     rot_mat: 3d tranformation matrix (from the xy plane to the 3d space)
-    trans_z: translation amount in the z direction
+    translation_z: translation amount in the z direction
     """
     
     # Note: the order of rotation and translation is important. Here we have to rotate first and then translate
     # rotate the points by theta (the angle of the 2d ellipse)
     sampled_xy = np.stack((sampled_x, sampled_y))
-    sampled_xy = rot_theta @ sampled_xy
+    sampled_xy = rotation_theta @ sampled_xy
 
-    # shift the 2d points on the ellipse by c_2d
-    x_shift = np.full(sampled_x.shape, c_2d[0])
+    # shift the 2d points on the ellipse by center_2d
+    x_shift = np.full(sampled_x.shape, center_2d[0])
     x_2d = sampled_xy[0] + x_shift
-    y_shift = np.full(sampled_y.shape, c_2d[1])
+    y_shift = np.full(sampled_y.shape, center_2d[1])
     y_2d = sampled_xy[1] + y_shift
     sampled_trans_xy = np.stack((x_2d, y_2d))
 
     # transform all the points back into the original 3d space
     z_zeros = np.zeros((1, sampled_trans_xy.shape[1]))
     sampled_pts_3d = np.concatenate((sampled_trans_xy, z_zeros), axis=0)
-    rot_mat_inv = np.linalg.inv(rotate_mat)
+    rotation_matrix_inv = np.linalg.inv(rotation_matrix)
     sampled_pts_3d = rot_mat_inv @ sampled_pts_3d
         
     # get the inverse translation z
     num_samples = len(sampled_x)
-    inverse_trans_vec = np.tile(np.array([0, 0, -trans_z]).T, (num_samples, 1)).T
-    sampled_pts_3d -= inverse_trans_vec
+    inverse_translation = np.tile(np.array([0, 0, -translation_z]).T, (num_samples, 1)).T
+    sampled_pts_3d -= inverse_translation
 
     return sampled_trans_xy, sampled_pts_3d
 
 
-def getSampledPtVals(a, b, c_2d, sampled_x, sampled_y, transformed_2d_x, transformed_2d_y, rot_neg_theta, r=None):
+def getSampledPtVals(a, b, center_2d, sampled_x, sampled_y, transformed_2d_x, transformed_2d_y, neg_rotation_theta, r=None):
 
     # rotate the original 2d points centered at (0, 0) by neg_theta
-    x_shift_ori = np.full(transformed_2d_x.shape, c_2d[0])
-    y_shift_ori = np.full(transformed_2d_y.shape, c_2d[1])
+    x_shift_ori = np.full(transformed_2d_x.shape, center_2d[0])
+    y_shift_ori = np.full(transformed_2d_y.shape, center_2d[1])
     trans_rot_2d_x = transformed_2d_x - x_shift_ori
     trans_rot_2d_y = transformed_2d_y - y_shift_ori
     trans_rot_2d_xy = np.stack((trans_rot_2d_x, trans_rot_2d_y))
-    trans_rot_2d_xy = rot_neg_theta @ trans_rot_2d_xy
+    trans_rot_2d_xy = neg_rotation_theta @ trans_rot_2d_xy
     
     intersections_2d_all = np.zeros(trans_rot_2d_xy.shape)
     for i in range(trans_rot_2d_xy.shape[1]):
@@ -478,24 +534,24 @@ def getSampledPtVals(a, b, c_2d, sampled_x, sampled_y, transformed_2d_x, transfo
     return sampled_pt_vals
 
 
-def getTextureCoordinates(c_2d, sampled_x, sampled_y, transformed_2d_x, transformed_2d_y, rot_neg_theta, img_name=None, img_dir=None, p_radius=5, res=500, save_textures=False):
+def getTextureCoordinates(center_2d, sampled_x, sampled_y, transformed_2d_x, transformed_2d_y, neg_rotation_theta, img_name=None, img_dir=None, p_radius=5, res=500, save_textures=False):
     """
     Generate texture coordinates and the image for the cut plane of the tube.
-    c_2d: center of the 2d ellipse.
+    center_2d: center of the 2d ellipse.
     sampled_x, sampled_y: sampled points on the 2d ellipse sentered at (0, 0)
     transformed_2d_x, transformed_2d_y: original points after the 3d to 2d transformation (not centered at (0, 0))
-    rot_neg_theta: the tranformation matrix for rotating by -theta
+    neg_rotation_theta: the tranformation matrix for rotating by -theta
     time_lag: the time it takes for each orbit to reach the 3d plane (used as the second channel of the texture)
     p_radius: odd integer, the radius of the points in the image of the cut plane, e.g. 3 -> 3 x 3 patch
     """
 
     # rotate the original 2d points centered at (0, 0) by neg_theta. All points are now centered at (0, 0) without rotation
-    x_shift_ori = np.full(transformed_2d_x.shape, c_2d[0])
-    y_shift_ori = np.full(transformed_2d_y.shape, c_2d[1])
+    x_shift_ori = np.full(transformed_2d_x.shape, center_2d[0])
+    y_shift_ori = np.full(transformed_2d_y.shape, center_2d[1])
     trans_rot_2d_x = transformed_2d_x - x_shift_ori
     trans_rot_2d_y = transformed_2d_y - y_shift_ori
     trans_rot_2d_xy = np.stack((trans_rot_2d_x, trans_rot_2d_y))
-    trans_rot_2d_xy = rot_neg_theta @ trans_rot_2d_xy
+    trans_rot_2d_xy = neg_rotation_theta @ trans_rot_2d_xy
 
     # find max x and y difference in sampled points
     max_x_diff = np.max(pairwise_distances(sampled_x.reshape(-1,1)))
@@ -596,7 +652,7 @@ def getTextureCoordinates(c_2d, sampled_x, sampled_y, transformed_2d_x, transfor
         return sampled_u_percent, sampled_v_percent, img_mat
 
 
-def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_data_list, sampled_u_all_list, sampled_v_all_list, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
+def dumpJSON(sampled_pts_all_list, center_all_list, time_data_list, sampled_u_all_list, sampled_v_all_list, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all=None, img_mat_all_list=None, starting_time_index=None):
     """
     Save tube data to JSON
     starting_time_index: the starting time step index of the tube, if it is not 0.
@@ -616,11 +672,11 @@ def dumpJSON(sampled_pts_all_list, c_3d_all_list, time_data_list, sampled_u_all_
 
     for t, time_step in enumerate(time_data_list):
         data_dict["polygons"].append({"time": time_step})
-        c_3d_t_meters = c_3d_all_list[t]
-        c_3d_t_meters *= astrounit.au.to(astrounit.m)
-        data_dict["polygons"][t]["center"] = {"x": c_3d_t_meters[0],
-                                       "y": c_3d_t_meters[1],
-                                       "z": c_3d_t_meters[2]}
+        center_t_meters = center_all_list[t]
+        center_t_meters *= astrounit.au.to(astrounit.m)
+        data_dict["polygons"][t]["center"] = {"x": center_t_meters[0],
+                                       "y": center_t_meters[1],
+                                       "z": center_t_meters[2]}
         
         data_dict["polygons"][t]["axes-length"] = {"a": axes_length_all[t][0],
                                                    "b": axes_length_all[t][1],
@@ -708,7 +764,8 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
     Get the ellipses for orbits from the same submission period
     
     data_directory: Should end with "/"
-    num_sample_ellipse: the number of sample points we get from the circumference of the ellipse
+    num_sample_ellipse: the number of sample points we get from the circumference of the
+    ellipse
     """
 
     # Extract the variants coordinates and velocities files from the given data 
@@ -765,7 +822,7 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
     print("Shape of timed_variants_coordinates[0]", timed_variants_coordinates[0].shape)
 
     sampled_pts_all = []
-    c_3d_all = []
+    center_all = []
     time_lag_all = []
     sampled_pt_vals_all = []
     sampled_u_all = []
@@ -782,8 +839,9 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
     os.makedirs(texture_dir, exist_ok = True)        
 
     # Get the normal of the solar system
+    # TODO: Why this date?
     utctime = ["Jan 1, 2015"]
-    nss = getNormalSolarSystem(utctime)
+    ssb_normal = getNormalSolarSystem(utctime)
 
     for t in range(num_time_steps):
         print("Time step", t)
@@ -798,15 +856,16 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
         # Compute ellipsoid and center of the ellipsoid using mvee
         # TODO: Why do we transpose this array? Isnt the first elemet all coordinates for
         # the first timestep?
-        Xi = timed_variants_coordinates[t].T
-        print("Xi shape", Xi.shape)
-        L_3d, H_3d, c_3d = computeEllipsoid(Xi)
+        coordinates_t = timed_variants_coordinates[t].T
+        print("coordinates_t shape", coordinates_t.shape)
+        L_3d, hermitian_3d, center = computeEllipsoid(coordinates_t)
         
-        # The eigenvectors of H_3d are the orientation of the semi-axes
-        eigenvalues, eigenvectors = np.linalg.eig(H_3d)
+        # The eigenvectors of hermitian_3d are the orientation of the semi-axes
+        eigenvalues, eigenvectors = np.linalg.eig(hermitian_3d)
 
         # We can compute the length of the semi-axes a, b, and c from the eigenvalues
         # TODO: Is this math correct? 
+        # TODO: Ask KJ about this 
         axes_lengths = np.sqrt(np.reciprocal(eigenvalues))
         axes_lengths_all.append(axes_lengths)
         print("Axes lengths", axes_lengths)
@@ -815,92 +874,115 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
         axes_direction_all.append(eigenvectors)
         print("Eigenvectors", eigenvectors)
 
-        
+        # Get unit vector from the center of ellipse to SSB -> center_to_ssb
+        center_to_ssb = np.array([0, 0, 0]) - center
+        center_to_ssb = center_to_ssb/np.linalg.norm(center_to_ssb)
 
-        # Get unit vector from c_3d to the sun -> vec_csun
-        vec_csun = np.array([0, 0, 0]) - c_3d
-        vec_csun = vec_csun/np.linalg.norm(vec_csun)
+        # We use the average velocity vector as the normal of the ellipse plane
+        # TODO: Why transpose here?
+        velocities_t = ordered_variants_velocities[i].T
+        mean_velocity = np.mean(velocities_t, axis = 1)
 
-        # use the average velocity vector (n_3d) as the normal of the plane
-        Vi = ordered_variants_velocities[i].T
-        n_3d = np.mean(Vi, axis=1)
+        # Compute the intersection between the ellipse plane and the orbit for all orbits
+        # This gives a number to how far behind or ahead each variant orbit is compared
+        # to the average movement
+        plane_orbit_intersection = np.zeros(coordinates_t.shape)
+        time_lag = np.zeros(coordinates_t.shape[1])
+        for orbit in range(coordinates_t.shape[1]):
+            coordinates_t_o = coordinates_t[:, orbit]
+            velocities_t_o = velocities_t[:, orbit]
+            time, intersection = computePlaneLineIntersection(
+                mean_velocity,
+                center,
+                coordinates_t_o,
+                velocities_t_o
+            )
+            time_lag[orbit] = time
+            plane_orbit_intersection[:, orbit] = intersection
 
-        # compute orbit plane intersection points and time lag for all orbits
-        orbit_plane_intersection = np.zeros(Xi.shape)
-        time_lag = np.zeros(Xi.shape[1])
-        for j in range(Xi.shape[1]):
-            lp = Xi[:, j]
-            lv = Vi[:, j]
-            t, intersection_coor = computePlaneLineIntersection(n_3d, c_3d, lp, lv)
-            time_lag[j] = t
-            orbit_plane_intersection[:, j] = intersection_coor
-
+        # TODO: Clean up plotting code
         if plotEllipse is True:
             # Fig 1 (3d): plot points and ellipsoid center
             fig = plt.figure()
             ax = fig.add_subplot(projection='3d')
-            x_3d = Xi[0, :]
-            y_3d = Xi[1, :]
-            z_3d = Xi[2, :]
+            x_3d = coordinates_t[0, :]
+            y_3d = coordinates_t[1, :]
+            z_3d = coordinates_t[2, :]
             ax.scatter(x_3d, y_3d, z_3d)
-            ax.scatter(c_3d[0], c_3d[1], c_3d[2], s=50)
+            ax.scatter(center[0], center[1], center[2], s=50)
             print("x_3d shape", x_3d.shape)
 
-            # Fig 1 (3d): plot unit vector vec_csun
-            # ax.quiver(c_3d[0], c_3d[1], c_3d[2], vec_csun[0], vec_csun[1], vec_csun[2], color='red')
+            # Fig 1 (3d): plot unit vector center_to_ssb
+            # ax.quiver(center[0], center[1], center[2], center_to_ssb[0], center_to_ssb[1], center_to_ssb[2], color='red')
 
-            # Fig 1 (3d): plot the unit vector of nss
-            # ax.quiver(c_3d[0], c_3d[1], c_3d[2], nss[0], nss[1], nss[2], color='darkorchid')
+            # Fig 1 (3d): plot the unit vector of ssb_normal
+            # ax.quiver(center[0], center[1], center[2], ssb_normal[0], ssb_normal[1], ssb_normal[2], color='darkorchid')
 
-            # Fig 1 (3d): plot n_3d and the plane
-            xr = np.linspace(c_3d[0] - 3e-08, c_3d[0] + 3e-08, num=20)
-            yr = np.linspace(c_3d[1] - 3e-08, c_3d[1] + 3e-08, num=20)
-            xx, yy, pz = computePlane(n_3d, c_3d, xr, yr)
+            # Fig 1 (3d): plot mean_velocity and the plane
+            xr = np.linspace(center[0] - 3e-08, center[0] + 3e-08, num=20)
+            yr = np.linspace(center[1] - 3e-08, center[1] + 3e-08, num=20)
+            xx, yy, pz = computePlane(mean_velocity, center, xr, yr)
             # ax.plot_surface(xx, yy, pz, color="green", alpha=0.5)
-            ax.quiver(c_3d[0], c_3d[1], c_3d[2], n_3d[0], n_3d[1], n_3d[2], color='green')
+            ax.quiver(center[0], center[1], center[2], mean_velocity[0], mean_velocity[1], mean_velocity[2], color='green')
             ax.set_aspect('equal')
         
             # Fig 1 (3d): plot orbit plane intersection points on the plan
-            intersectX = orbit_plane_intersection[0, :]
-            intersectY = orbit_plane_intersection[1, :]
-            intersectZ = orbit_plane_intersection[2, :]
+            intersectX = plane_orbit_intersection[0, :]
+            intersectY = plane_orbit_intersection[1, :]
+            intersectZ = plane_orbit_intersection[2, :]
             ax.scatter(intersectX, intersectY, intersectZ)
 
             # (for plotting) get the m vector and the projected m vector
-            m, proj_m = _getMonPlane(n_3d, vec_csun, nss)
+            m, proj_m = _getMonPlane(mean_velocity, center_to_ssb, ssb_normal)
 
-            # Fig 1 (3d): plot m and proj_m from the c_3d
-            # ax.quiver(c_3d[0], c_3d[1], c_3d[2], m[0], m[1], m[2], color='gold')
-            ax.quiver(c_3d[0], c_3d[1], c_3d[2], proj_m[0], proj_m[1], proj_m[2], color='tab:orange')
+            # Fig 1 (3d): plot m and proj_m from the center
+            # ax.quiver(center[0], center[1], center[2], m[0], m[1], m[2], color='gold')
+            ax.quiver(center[0], center[1], center[2], proj_m[0], proj_m[1], proj_m[2], color='tab:orange')
             plt.show()
 
-        # Note that the intersection points are on a 3d plane
-        # Need to transform the plane onto the xy-plane with a translation (trans_vec) and a rotation (rotate_mat)
-        # n_2d is the normal of the x-y plane (0, 0, 1)
-        n_2d = np.array([0, 0, 1])
-        trans_z = getTranslationZ(n_3d, c_3d)
-        rotate_mat = getRotationalMatrix(n_3d, n_2d)
+        # Note that the intersection points are on a plane in 3D space
+        # We need to transform this plane onto the xy-plane with a translation and a
+        # rotation to make this into a 2D problem
+        # The normal of the x-y plane is (0, 0, 1)
+        # TODO: This is wrong?
+        normal = np.array([0, 0, 1])
+        translation_z = np.dot(center, mean_velocity)/mean_velocity[2]
+        rotation_matrix = getRotationalMatrix(mean_velocity, normal)
         
-        # get the translated and rotated points. All points should be on the x-y plane
-        expanded_trans_vec = np.tile(np.array([0, 0, trans_z]).T, (num_samples, 1)).T
-        translated_points = orbit_plane_intersection - expanded_trans_vec
-        transformed_points = rotate_mat @ translated_points
+        expanded_translation = np.tile(
+            np.array([0, 0, translation_z]).T,
+            (num_samples, 1)
+        ).T
+        translated_points = plane_orbit_intersection - expanded_translation
+        transformed_points = rotation_matrix @ translated_points
+
+        # All points should now be on the x-y plane
 
         # Force the z coordinates of the transformed points to be 0
+        # TODO: This should already be the case if the rotation and translation was
+        # correct. If this is run, then we are skewing the plane and changeing its shape.
         transformed_points[2, :] = 0
 
-        # Then this becomes a 2d problem
         # Compute the minimum enclosing ellipse of the intersection points on the xy-plane
-        transformed_2d = transformed_points[:2, :]
-        print(transformed_2d.shape)
-        transformed_2d_x = transformed_2d[0, :]
-        transformed_2d_y = transformed_2d[1, :]
-        L_2d, H_2d, c_2d = computeEllipsoid(transformed_2d)
+        transformed_points_2d = transformed_points[:2, :]
+        print(transformed_points_2d.shape)
+        transformed_points_2d_x = transformed_points_2d[0, :]
+        transformed_points_2d_y = transformed_points_2d[1, :]
+        L_2d, hermitian_2d, center_2d = computeEllipsoid(transformed_points_2d)
 
         # Compute ellipse ray intersection centered at origin
-        a, b, theta = getEllipseParam(H_2d)
-        rot_theta, rot_neg_theta = getRotationMat2D(theta)
-        rotated_c_mp_2d, elli_r_o = getStartingPoint(vec_csun, nss, trans_z, rotate_mat, c_2d, H_2d, c_3d, n_3d)
+        a, b, theta = getEllipseParam(hermitian_2d)
+        rotation_theta, neg_rotation_theta = getRotationMat2D(theta)
+        rotated_c_mp_2d, elli_r_o = getStartingPoint(
+            center_to_ssb,
+            ssb_normal,
+            translation_z,
+            rotation_matrix,
+            center_2d,
+            hermitian_2d,
+            center,
+            mean_velocity
+        )
 
         # Compute the angle in radiant of the intersection point
         rad = np.arctan2(elli_r_o[1], elli_r_o[0])
@@ -912,6 +994,7 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
         assert np.isclose(new_p[0], elli_r_o[0])
         assert np.isclose(new_p[1], elli_r_o[1])
 
+        # TODO: Clean up plotting code
         if plotEllipse is True:
             # Fig 2 (3d): plot the new plane and the transformed points
             fig = plt.figure()
@@ -924,38 +1007,38 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
             # ax.set_aspect('equal')  # super important: ensures consistent scale for the axes!!!
 
             # Fig 2 (3d): plot the center of the ellipse
-            ax.scatter(c_2d[0], c_2d[1], 0, s=50, c="red")
+            ax.scatter(center_2d[0], center_2d[1], 0, s=50, c="red")
 
             # Get point mp_2d and vector c_mp_3d
-            m, proj_m = _getMonPlane(n_3d, vec_csun, nss)
-            mp_2d, c_mp_2d = _getMP2d(proj_m, c_3d, trans_z, rotate_mat, c_2d)
+            m, proj_m = _getMonPlane(mean_velocity, center_to_ssb, ssb_normal)
+            mp_2d, c_mp_2d = _getMP2d(proj_m, center, translation_z, rotation_matrix, center_2d)
 
             # Rotaet c_mp_2d based on the rotation angle of the ellipse
-            a, b, theta = getEllipseParam(H_2d)
-            rot_theta, rot_neg_theta = getRotationMat2D(theta)
-            rotated_c_mp_2d = rot_neg_theta @ c_mp_2d[:2]
+            a, b, theta = getEllipseParam(hermitian_2d)
+            rotation_theta, neg_rotation_theta = getRotationMat2D(theta)
+            rotated_c_mp_2d = neg_rotation_theta @ c_mp_2d[:2]
             # TODO: Not sure why sometimes the rotated_c_mp_2d is on the other size of the ellipse
 
             # Fig 2 (3d): plot mp_2d and c_mp_2d
-            ax.quiver(c_2d[0], c_2d[1], 0, c_mp_2d[0], c_mp_2d[1], c_mp_2d[2], color="tab:orange")
+            ax.quiver(center_2d[0], center_2d[1], 0, c_mp_2d[0], c_mp_2d[1], c_mp_2d[2], color="tab:orange")
             plt.show()
 
-            # Fig 3 (2d): plot a 2D version of the problem, points and min ellipse and c_2d
+            # Fig 3 (2d): plot a 2D version of the problem, points and min ellipse and center_2d
             fig = plt.figure()
             ax = fig.add_subplot()
             # transformed_2d_x = transformed_2d[0, :]
             # transformed_2d_y = transformed_2d[1, :]
-            # ax.scatter(c_2d[0], c_2d[1], s=50, c='red')
+            # ax.scatter(center_2d[0], center_2d[1], s=50, c='red')
             ax.scatter(transformed_2d_x, transformed_2d_y)
-            plot_ellipse(H_2d, c_2d, ax=ax)
+            plot_ellipse(hermitian_2d, center_2d, ax=ax)
 
             # Fig 3 (2d): plot c_mp_2d
-            ax.quiver(c_2d[0], c_2d[1], c_mp_2d[0], c_mp_2d[1], scale=1, width=0.02, color="tab:orange")
+            ax.quiver(center_2d[0], center_2d[1], c_mp_2d[0], c_mp_2d[1], scale=1, width=0.02, color="tab:orange")
 
             # Fig 3 (2d): plot rotated_c_mp_2d and the ellipse without rotation
-            ax.quiver(c_2d[0], c_2d[1], rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=1, width=0.02, color="tab:pink")
+            ax.quiver(center_2d[0], center_2d[1], rotated_c_mp_2d[0], rotated_c_mp_2d[1], scale=1, width=0.02, color="tab:pink")
             kwrg = {'facecolor': 'none', 'edgecolor':'tab:pink', 'alpha':1, 'linewidth':2}
-            ellip = Ellipse(xy=c_2d, width=2*a, height=2*b, angle=0, **kwrg)
+            ellip = Ellipse(xy=center_2d, width=2*a, height=2*b, angle=0, **kwrg)
             ax.set_aspect('equal')
             plt.xticks([])
             plt.yticks([])
@@ -986,21 +1069,22 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
         x_elli_2d, y_elli_2d = sampleEllipse2D(a, b, phi, num_sample_ellipse, 1000)
 
         # Get sample points density value
-        sampled_pt_vals = getSampledPtVals(a, b, c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta)
+        sampled_pt_vals = getSampledPtVals(a, b, center_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, neg_rotation_theta)
         sampled_pt_vals_all.append(sampled_pt_vals)
 
         # Get texture coordinates
         if sectioned_uncertainty is True:
-            sampled_u, sampled_v, img_mat = getTextureCoordinates(c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta, save_textures=False)
+            sampled_u, sampled_v, img_mat = getTextureCoordinates(center_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, neg_rotation_theta, save_textures=False)
         else:
             img_name = str(i) + ".png"
-            sampled_u, sampled_v = getTextureCoordinates(c_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, rot_neg_theta, img_name, texture_dir, save_textures=True)
+            sampled_u, sampled_v = getTextureCoordinates(center_2d, x_elli_2d, y_elli_2d, transformed_2d_x, transformed_2d_y, neg_rotation_theta, img_name, texture_dir, save_textures=True)
 
         # Transform the sampled points back to the original 3d space
-        sampled_trans_xy, sampled_pts_3d = transformPts3D(x_elli_2d, y_elli_2d, c_2d, rot_theta, rotate_mat, trans_z)
+        sampled_trans_xy, sampled_pts_3d = transformPts3D(x_elli_2d, y_elli_2d, center_2d, rotation_theta, rotation_matrix, translation_z)
         print("sampled 2d points shape")
         print(sampled_trans_xy.shape)
 
+        # TODO: Clean up plotting code
         if plotEllipse is True:
             # Fig 5 (2d): plot the sampled points from the ellipse
             fig = plt.figure()
@@ -1030,15 +1114,15 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
             fig.colorbar(s, ax=ax, cmap="magma_r", orientation='vertical')
             plt.show()
 
-            # Fig 6 (2d): Plot the original ellipse centered at c_2d and the sampled points centered at c_2d
+            # Fig 6 (2d): Plot the original ellipse centered at center_2d and the sampled points centered at center_2d
             fig = plt.figure()
             ax = fig.add_subplot()
             transformed_2d_x = transformed_2d[0, :]
             transformed_2d_y = transformed_2d[1, :]
-            ax.scatter(c_2d[0], c_2d[1], s=50, c='red')
+            ax.scatter(center_2d[0], center_2d[1], s=50, c='red')
             ax.scatter(transformed_2d_x, transformed_2d_y)
             ax.set_aspect('equal')
-            plot_ellipse(H_2d, c_2d, ax=ax)
+            plot_ellipse(hermitian_2d, center_2d, ax=ax)
             
 
             # Transform the sampled points back to the original 3d space, plot the 3d points in the xy plane
@@ -1049,8 +1133,8 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
             fig = plt.figure()
             ax = fig.add_subplot(projection="3d")
             ax.scatter(sampled_pts_3d[0], sampled_pts_3d[1], sampled_pts_3d[2], color="tab:orange")
-            ax.scatter(Xi[0, :], Xi[1, :], Xi[2, :], color="tab:blue")
-            ax.scatter(c_3d[0], c_3d[1], c_3d[2], s=50, color="red")
+            ax.scatter(coordinates_t[0, :], coordinates_t[1, :], coordinates_t[2, :], color="tab:blue")
+            ax.scatter(center[0], center[1], center[2], s=50, color="red")
             ax.set_aspect('equal')
             plt.show()
 
@@ -1063,7 +1147,7 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
             # plt.close("all")
 
         sampled_pts_all.append(sampled_pts_3d)
-        c_3d_all.append(c_3d)
+        center_all.append(center)
         time_lag_all.append(time_lag)
         sampled_u_all.append(sampled_u)
         sampled_v_all.append(sampled_v)
@@ -1082,51 +1166,51 @@ def getEllipsePerSubmission(data_directory, num_sample_ellipse, out_dir, section
     # time_data = time_data[8800:9000]
             
     if sectioned_uncertainty is True:
-        return time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, img_mat_all
+        return time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, img_mat_all
     else:
-        return time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all
+        return time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all
 
 
 def main(input_dir, out_dir):
     # For 2023 CX1
-    time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
     print(time_data)
     print(time_lag_all)
-    dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all)
+    dumpJSON(sampled_pts_all, center_all, time_data, sampled_u_all, sampled_v_all, axes_length_all, axes_direction_all, out_dir, sampled_pt_vals_all)
 
     # For figures...
     # input_dir = "../adam_core/dynamic_uncertainty/2012 DA14/2013-02-10T04.54.49.000/"
     # out_dir = "./sampled_data/dynamic_uncertainty/2012 DA14/for_figures/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
+    # time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=True)
 
     # Increase Apophis resolution...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, center_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For 2023 CX1 (impact corridor)...
     # input_dir = "../adam_core/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
     # out_dir = "./sampled_data/impact_corridor/2023 CX1/2023-02-13T02.38.19.001/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, center_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For Apophis...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000/"
     # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all, starting_time_index=8800)
+    # time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, center_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all, starting_time_index=8800)
 
     # For Apophis subtube...
     # input_dir = "../adam_core/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # out_dir = "./sampled_data/impact_corridor/2004 MN4/2004-12-27T21.28.37.000_8800-9000/adaptive/"
     # os.makedirs(out_dir, exist_ok=True)
-    # time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
-    # dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    # time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(input_dir, 50, out_dir, sectioned_uncertainty=False, plotEllipse=False)
+    # dumpJSON(sampled_pts_all, center_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For dynamic uncertainty (nested tube)...
     # input_path = "../adam_core/dynamic_uncertainty/2012 DA14/"
@@ -1141,8 +1225,8 @@ def main(input_dir, out_dir):
     #     print(submission_path)
     #     out_dir = os.path.join(out_parent_dir, submission_dir)
     #     os.makedirs(out_dir, exist_ok=True)
-    #     time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(submission_path, 50, out_dir, plotEllipse=False)
-    #     dumpJSON(sampled_pts_all, c_3d_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
+    #     time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all = getEllipsePerSubmission(submission_path, 50, out_dir, plotEllipse=False)
+    #     dumpJSON(sampled_pts_all, center_all, time_data, sampled_u_all, sampled_v_all, out_dir, sampled_pt_vals_all)
 
     # For sectioned uncertainty...
     # input_path = "../adam_core/sectioned_uncertainty/2012 DA14/"
@@ -1153,7 +1237,7 @@ def main(input_dir, out_dir):
     # time_data_list = []
     # time_lag_all_list = []
     # sampled_pts_all_list = []
-    # c_3d_all_list = []
+    # center_all_list = []
     # sampled_pt_vals_all_list = []
     # sampled_u_all_list = []
     # sampled_v_all_list = []
@@ -1166,11 +1250,11 @@ def main(input_dir, out_dir):
     # for submission_dir in dir_list:
     #     submission_path = os.path.join(input_path, submission_dir) + "/"
     #     print(submission_path)
-    #     time_data, time_lag_all, sampled_pts_all, c_3d_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, img_mat_all = getEllipsePerSubmission(submission_path, 50, out_dir, sectioned_uncertainty=True, plotEllipse=False)
+    #     time_data, time_lag_all, sampled_pts_all, center_all, sampled_pt_vals_all, sampled_u_all, sampled_v_all, img_mat_all = getEllipsePerSubmission(submission_path, 50, out_dir, sectioned_uncertainty=True, plotEllipse=False)
     #     time_data_list += list(time_data)
     #     time_lag_all_list += time_lag_all
     #     sampled_pts_all_list += sampled_pts_all
-    #     c_3d_all_list += c_3d_all
+    #     center_all_list += center_all
     #     sampled_pt_vals_all_list += sampled_pt_vals_all
     #     sampled_u_all_list += sampled_u_all
     #     sampled_v_all_list += sampled_v_all
@@ -1179,7 +1263,7 @@ def main(input_dir, out_dir):
     # print(len(time_data_list))
     # print(len(time_lag_all_list))
     # print(len(sampled_pts_all_list))
-    # print(len(c_3d_all_list))
+    # print(len(center_all_list))
     # print(len(sampled_pt_vals_all_list))
     # print(len(sampled_u_all_list))
     # print(len(img_mat_all_list))
@@ -1188,4 +1272,4 @@ def main(input_dir, out_dir):
     # # print("time lag range", time_lag_range)
 
     # # out_dir = "./sampled_data/1998 SG172_2007"
-    # dumpJSON(sampled_pts_all_list, c_3d_all_list, time_data_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all_list, img_mat_all_list)
+    # dumpJSON(sampled_pts_all_list, center_all_list, time_data_list, sampled_u_all_list, sampled_v_all_list, out_dir, sampled_pt_vals_all_list, img_mat_all_list)
