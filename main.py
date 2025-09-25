@@ -5,10 +5,12 @@ from dataclasses import dataclass
 import spiceypy as spice
 METAKERNEL = './data/kernels/meta-kernel.tm'
 
-import src.getEllipse as old 
+#import src.getEllipse as old 
 import src.ellipse as ellipse 
 import src.tube as tube 
 
+
+AU = 149597870700
 
 # TODO: Rename to be more descriptive
 @dataclass
@@ -64,21 +66,26 @@ def loadData(data_directory):
     time_data = np.load(time_file)
 
     # Load the coordinate data
-    # TODO: How does it look like? What is included and in what order?
     variants_coordinates = np.load(
         os.path.join(data_directory, variants_coordinates_file)
     )
     print("Coordinate numpy shape", variants_coordinates.shape)
 
+    # Scale the coordinate data to be in meters (from AU)
+    for v in range(variants_coordinates.shape[0]):
+        variants_coordinates[v] = AU * variants_coordinates[v]
+
     # Load the velocity data
-    # TODO: How does it look like? What is included and in what order?
     variants_velocities = np.load(
         os.path.join(data_directory, variants_velocities_file)
     )
     print("Velocity numpy shape", variants_velocities.shape)
     
+    # Scale the velocity data to be in meters per second (from AU per second)
+    for v in range(variants_velocities.shape[0]):
+        variants_velocities[v] = AU * variants_velocities[v]
+
     # Get meta data from the filename
-    # TODO: This feels fragile, shoudl we store it in the file somehow? 
     # Examplefilename: variants_coordinates_10000.npy -> 10000.npy -> 10 000 samples
     num_variants = int(variants_coordinates_file.split("_")[-1].split(".")[0])
     print("Number of variants", num_variants)

@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plotPoints(points):
@@ -10,125 +11,236 @@ def plotPoints(points):
     """
 
     # Prepare the figure
-    figure = plt.figure()
+    figure = plt.figure(figsize = plt.figaspect(1))
     axes = figure.add_subplot(projection = '3d')
 
-    # Seperate the dimensions of the points
-    x_3d = points[0, :]
-    y_3d = points[1, :]
-    z_3d = points[2, :]
+    # Plot the points onto the figure
+    axes.scatter(points[0, :], points[1, :], points[2, :], c = 'blue')
 
+    # Name the axes and title
+    plt.xlabel("X-Axis")
+    plt.ylabel("Y-Axis")
+    plt.title("Plot of points")
 
-    axes.scatter(x_3d, y_3d, z_3d)
-    axes.scatter(center[0], center[1], center[2], s = 50)
-
-    # Fig 1 (3d): plot unit vector center_to_ssb
-    # axes.quiver(center[0], center[1], center[2], center_to_ssb[0], center_to_ssb[1], center_to_ssb[2], color='red')
-
-    # Fig 1 (3d): plot the unit vector of ssb_normal
-    # axes.quiver(center[0], center[1], center[2], ssb_normal[0], ssb_normal[1], ssb_normal[2], color='darkorchid')
-
-    # Fig 1 (3d): plot mean_velocity and the plane
-    xr = np.linspace(center[0] - 3e-08, center[0] + 3e-08, num=20)
-    yr = np.linspace(center[1] - 3e-08, center[1] + 3e-08, num=20)
-    xx, yy, pz = computePlane(mean_velocity, center, xr, yr)
-    # axes.plot_surface(xx, yy, pz, color="green", alpha=0.5)
-    axes.quiver(center[0], center[1], center[2], mean_velocity[0], mean_velocity[1], mean_velocity[2], color='green')
-    axes.set_aspect('equal')
-
-    # Fig 1 (3d): plot orbit plane intersection points on the plan
-    intersectX = plane_orbit_intersection[0, :]
-    intersectY = plane_orbit_intersection[1, :]
-    intersectZ = plane_orbit_intersection[2, :]
-    axes.scatter(intersectX, intersectY, intersectZ)
-
-    # (for plotting) get the m vector and the projected m vector
-    m, proj_m = _getMonPlane(mean_velocity, center_to_ssb, ssb_normal)
-
-    # Fig 1 (3d): plot m and proj_m from the center
-    # axes.quiver(center[0], center[1], center[2], m[0], m[1], m[2], color='gold')
-    axes.quiver(center[0], center[1], center[2], proj_m[0], proj_m[1], proj_m[2], color='tab:orange')
     plt.show()
 
 
-def plotEllipsoid(ellipsoid_matrix):
-    return None
-
-
-def plotEllipse(ellipse_matrix):
-    return None
-
-
-def plot_ellipse(mat, pos=None, ax=None, fc='none', ec=[0,0,0], a=1, lw=2):
+def plotPointsAndPlane(points, center, normal):
     """
-    Plots an ellipse based on the specified positive-definite matrix (*mat*) 
-    and center (*pos*). Additional keyword arguments are passed on to the 
-    ellipse patch artist.
+    Plot the given points and the given plane
 
-    Parameters
-    ----------
-        mat : The 2x2 matrix to base the ellipse on
-        pos : The (2,) array that gives the center of the ellipse. Defaults
-            to (0, 0)
-        ax : The axis that the ellipse will be plotted on. Defaults to the 
-            current axis.
+    Input:
+        points: A 3D point could of points to plot
+        center: The center point of the plane 
+        normal: The 3D vector normal of the plane
     """
 
-    import numpy as np
-    from matplotlib.patches import Ellipse
+    # Prepare the figure
+    figure = plt.figure(figsize = plt.figaspect(1))
+    axes = figure.add_subplot(projection = '3d')
 
-    def get_sorted_eig(mat):
-        import numpy.linalg as la
-        s, u = la.eigh(mat)
-        idxs = np.argsort(s)
-        return s[idxs], u[:, idxs]
+    # Plot the points onto the figure
+    axes.scatter(points[0, :], points[1, :], points[2, :], c = 'blue')
 
-    kwrg = {'facecolor':fc, 'edgecolor':ec, 'alpha':a, 'linewidth':lw}
+    # Prepare the plane, from:
+    # https://stackoverflow.com/questions/3461869/plot-a-plane-based-on-a-normal-vector-and-a-point-in-matlab-or-matplotlib
+    # The plane formula is a*x + b*y + c*z + d = 0
+    # The normal is [a, b, c], we need to calculate d
+    d = -np.dot(normal, center)
 
-    if pos is None:
-        pos = np.array([0, 0])
+    # Set of all x and y values for the plane
+    xx, yy = np.meshgrid(range(100), range(100))
 
-    # Width and height are "full" widths, not radius
-    s, u = get_sorted_eig(mat)
-    theta = np.degrees(np.arctan2(u[1, 0], u[0, 0]))
-    width = 2*np.sqrt(s[0]*2)
-    height = 2*np.sqrt(s[1]*2)
+    # Calculate corresponding z-value for each xx and yy
+    zz = (-normal[0] * xx - normal[1] * yy - d) * 1.0/normal[2]
 
-    print(width/2)
-    print(height/2)
+    # plot the surface
+    axes.plot_surface(xx, yy, zz)
 
-    ellip = Ellipse(xy=pos, width=width, height=height, angle=theta, **kwrg)
+    # Plot the plane
 
-    if ax is None:
-        ax = plt.gca()
-    ax.add_artist(ellip)
-    ax.relim()
-    ax.autoscale_view()
+    # Name the axes and title
+    plt.xlabel("X-Axis")
+    plt.ylabel("Y-Axis")
+    plt.title("Plot of points")
+
+    plt.show()
 
 
-def applySettings(xlabel=None, ylabel=None, ylimits=None,
-                  legend=False, labspace=0.85):
-    '''
-    Generic pyplot settings from Erin to make plots prettier
-    '''
-    # Increase the sizes of labels and ticks
-    plt.tick_params(axis='both', labelsize=9)
-    if xlabel is not None:
-        plt.xlabel(xlabel, fontsize=9)
-    if ylabel is not None:
-        plt.ylabel(ylabel, fontsize=9)
+def plotPointsAndEllipsoid(points, center, ellipsoid_axes, ellipsoid_axes_lengths,
+                           rotation_matrix):
+    """
+    Plot the given points with the ellipsoid that encases them
 
-    if ylimits is not None:
-        # Change y-axis limits
-        ymin = ylimits[0]
-        ymax = ylimits[1]
-        if ymin is not None:
-            plt.ylim(ymin=ymin)
-        if ymax is not None:
-            plt.ylim(ymax=ymax)
+    Input:
+        points: A 3D point could of points to plot
+        center: The center point of the point cloud
+        ellipsoid_axes: The axes directions of the ellipsoid to plot
+        ellipsoid_axes_lengths: The axes lengths of the ellipsoid to plot
+        rotation_matrix: The rotation of the ellipsoid
+    """
 
-    if legend:
-        # Change location and text size of legend
-        lgd = plt.legend(loc='upper left', labelspacing=labspace)
-        plt.setp(lgd.get_texts(), fontsize='9')
-        return lgd
+    # Prepare the figure
+    figure, axes = plt.subplots(
+        nrows = 1,
+        ncols = 2,
+        #sharex = True,
+        #sharey = True,
+        figsize = plt.figaspect(1),
+        subplot_kw = dict(projection = '3d')
+    )
+
+    # Plot the points
+    axes[0].scatter(
+        points[0, :],
+        points[1, :],
+        points[2, :],
+        s = 10,
+        c = 'blue',
+        alpha = 0.6
+    )
+
+    # Plot the center point to be destinct from the other points
+    axes[0].scatter(
+        center[0],
+        center[1],
+        center[2],
+        s = 250,
+        c = 'red',
+        marker = 'x',
+        alpha = 1.0
+    )
+
+    # Name the axes and title
+    axes[0].set_xlabel("X-Axis")
+    axes[0].set_ylabel("Y-Axis")
+    axes[0].set_title("Plot of points and the ellipsoid center point")
+
+    # Set of all spherical angles:
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+
+    # Cartesian coordinates that correspond to the spherical angles on the ellipsoid:
+    # This is the equation of an ellipsoid, from:
+    # https://stackoverflow.com/questions/7819498/plotting-ellipsoid-with-matplotlib)
+    # and https://en.wikipedia.org/wiki/Ellipsoid
+    x = ellipsoid_axes_lengths[0] * np.outer(np.sin(v), np.cos(u))
+    y = ellipsoid_axes_lengths[1] * np.outer(np.sin(v), np.sin(u))
+    z = ellipsoid_axes_lengths[2] * np.outer(np.cos(v), np.ones_like(u))
+
+    # Apply the rotation of the ellipsoid
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            v = np.array([x[i][j], y[i][j], z[i][j]])
+            new_v = rotation_matrix @ v
+
+            x[i][j] = new_v[0]
+            y[i][j] = new_v[1]
+            z[i][j] = new_v[2]      
+
+    # Translate the ellipsoid
+    for i in range(x.shape[0]):
+        for j in range(x.shape[1]):
+            v = np.array([x[i][j], y[i][j], z[i][j]])
+            new_v = v + center
+
+            x[i][j] = new_v[0]
+            y[i][j] = new_v[1]
+            z[i][j] = new_v[2]  
+
+    # Plot the ellipsoid
+    axes[1].scatter(center[0], center[1], center[2], s = 100, c = 'red')
+    axes[1].plot_surface(x, y, z,  rstride = 4, cstride = 4, color = 'g', alpha = 0.3)
+
+    # Name the axes and title
+    axes[1].set_xlabel("X-Axis")
+    axes[1].set_ylabel("Y-Axis")
+    axes[1].set_title("Plot of ellipsoid and the center point")
+
+    plt.show()
+
+
+def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
+                           rotation_matrix):
+    # Prepare the figure
+    figure, axes = plt.subplots(
+        nrows = 1,
+        ncols = 2,
+        #sharex = True,
+        #sharey = True,
+        figsize = plt.figaspect(1),
+        subplot_kw = dict(projection = '2d')
+    )
+
+    # Plot the points
+    axes[0].scatter(
+        points[0, :],
+        points[1, :],
+        s = 10,
+        c = 'blue',
+        alpha = 0.6
+    )
+
+    # Plot the center point to be destinct
+    axes[0].scatter(
+        center[0],
+        center[1],
+        s = 250,
+        c = 'red',
+        marker = 'x',
+        alpha = 1.0
+    )
+
+    # Name the axes and title
+    axes[0].set_xlabel("X-Axis")
+    axes[0].set_ylabel("Y-Axis")
+    axes[0].set_title("Plot of points and the ellipse center point")
+
+    # Create the ellipse
+    ellipse = Ellipse(
+        xy = (center[0], center[1]),
+        height = ellipse_axes_lengths[0],
+        width = ellipse_axes_lengths[1],
+        edgecolor = 'g',
+        alpha = 0.3
+    )
+    
+    # Apply the rotation of the ellipse
+
+    
+    # Plot the ellipse
+    axes[1].scatter(center[0], center[1], s = 100, c = 'red')
+    axes[1].add_patch(ellipse)
+
+    # Name the axes and title
+    axes[1].set_xlabel("X-Axis")
+    axes[1].set_ylabel("Y-Axis")
+    axes[1].set_title("Plot of ellipse and the center point")
+
+    plt.show()
+
+def plotPointsComp(points_1, points_2):
+    """
+    Plot both sets of given points in different style to be able to compare them
+
+    Input:
+        points_1: The first 3D point cloud of points to plot
+        points_2: The second 3D point cloud of points to plot
+    """
+
+    # Prepare the figure
+    figure = plt.figure(figsize = plt.figaspect(1))
+    axes = figure.add_subplot(projection = '3d')
+
+    # Plot the first set of points onto the figure
+    axes.scatter(points_1[0, :], points_1[1, :], points_1[2, :], c = 'red')
+
+    # Plot the second set of points onto the figure
+    axes.scatter(points_2[0, :], points_2[1, :], points_2[2, :], c = 'blue')
+
+    # Name the axes and title
+    plt.xlabel("X-Axis")
+    plt.ylabel("Y-Axis")
+    plt.title("Two sets of points")
+
+    plt.show()

@@ -1,6 +1,8 @@
 import numpy as np
 import spiceypy as spice
 
+EPSILON = 1e-5
+
 
 # Common math functions
 def projectVectorToPlane(vector, normal):
@@ -28,17 +30,17 @@ def transformPoint(point, translation, rotation_matrix):
     Output: The transformed point
     """
 
-    # First translate the point 
-    translated_point = point - translation
+    # First apply the rotation
+    rotated_point = rotation_matrix @ point
 
-    # Then apply the rotation
-    return rotation_matrix @ translated_point
+    # Then translate the point
+    return rotated_point + translation
 
 
 def invTransformPoint(point, original_translation, original_rotation_matrix):
     """
     Inversely transform the input point with the given translation and rotation.
-    The given point has previouslt been transformed with the same input, this function
+    The given point has previously been transformed with the same input, this function
     reverese that transformation
 
     Input:
@@ -47,15 +49,15 @@ def invTransformPoint(point, original_translation, original_rotation_matrix):
                               point. This is the translation to reverse to apply the
                               inverse transform. 
         original_rotation_matrix: The rotation that has previously been applies and 
-                                  should be revered.
+                                  should be inversed.
     Output: The inversely transformed point
     """
 
-    # First rotate the point 
-    rotated_point = np.linalg.inv(original_rotation_matrix) @ point
-
-    # Then translate it
-    return rotated_point + original_translation
+    # First translate it back 
+    translated_point = rotated_point - original_translation
+    
+    # Then rotate the point the other direction
+    return np.linalg.inv(original_rotation_matrix) @ translated_point
 
 
 def calcXYPlaneRotationMatrix(normal):
@@ -130,9 +132,16 @@ def transformPointsToXYPlane(points, plane_center, plane_normal):
 
     # Apply the transformation to all points
     for p in range(points.shape[1]):
-        transformPoint(points[:, p], translation, rotation_matrix)
+        transformPoint(points[:, p], -translation, rotation_matrix)
 
-    return points
+    # Check that all points are on the XY plane
+    for p in range(points.shape[1]):
+        print("transformed point", points[:, p])
+        print("Z", points[2, p])
+        assert np.abs(points[2, p]) < EPSILON, "Not on XY plane"
+
+    # Return the XY coordinates of the transformed points
+    return points[:2, :]
 
 
 def invTransformPointsToXYPlane(points, original_plane_center, original_plane_normal):
@@ -160,9 +169,38 @@ def invTransformPointsToXYPlane(points, original_plane_center, original_plane_no
 
     # Apply the inverse transformation to all points
     for p in range(points.shape[1]):
-        invTransformPoint(points[:, p], translation, rotation_matrix)
+        invTransformPoint(points[:, p], -translation, rotation_matrix)
 
     return points
+
+
+def calcPlaneLineIntersection(normal, center, line_start, line_direction):
+    """
+    Compute the intersection point between the given plane and the given line
+
+    Input:
+        normal: The normal of the plane (not normalized)
+        center: The center point of the plane (a point on the plane)
+        line_start: The starting point of the line
+        line_direction: The direction of the line (not normalized)
+    
+    Output:
+        multiplier: The multiplier of the line_direction that is requiered for the 
+                    line_start to end up on the plane
+        intersection: the coordinate of the intersection
+    """
+
+    # First check if there ever will be an intersection
+    assert np.abs(np.dot(line_direction, normal)) > EPSILON, "No intersection"
+    
+    # Calculate the multiplier of the line direction to makes the point be on the plane
+    # Formula from: https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
+    multiplier = np.dot((center - line_start), normal) / np.dot(line_direction, normal)
+
+    # The calculate the coordinate of the intersection point
+    intersection = line_start + np.multiply(multiplier, line_direction)
+    
+    return multiplier, intersection
 
 
 # Space specific functions
