@@ -18,9 +18,140 @@ def plotPoints(points):
     axes.scatter(points[0, :], points[1, :], points[2, :], c = 'blue')
 
     # Name the axes and title
-    plt.xlabel("X-Axis")
-    plt.ylabel("Y-Axis")
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
     plt.title("Plot of points")
+
+    plt.show()
+
+
+def plotPointsAndAxes(points, center, axes_in):
+    """
+    Plot the given points, the center of the generated ellipsoid and its eigenvectors
+
+    Input:
+        points: A 3D point could of points to plot
+        center: A 3D point that is the center of the ellipsoid
+        points: A set of 3 axes vectors that are the eigenvectors of the ellipsoid
+    """
+
+    # Prepare the figure
+    figure = plt.figure(figsize = plt.figaspect(1))
+    axes = figure.add_subplot(projection = '3d')
+
+    # Plot the points onto the figure
+    axes.scatter(
+        points[0, :],
+        points[1, :],
+        points[2, :],
+        s = 10,
+        c = 'blue',
+        alpha = 0.6
+    )
+
+    # Plot the center point to be destinct from the other points
+    axes.scatter(
+        center[0],
+        center[1],
+        center[2],
+        s = 250,
+        c = 'red',
+        marker = 'x',
+        alpha = 1.0
+    )
+
+    # Plot the axes at the center point
+    axes.quiver(
+        *center,
+        axes_in[0, 0],
+        axes_in[0, 1],
+        axes_in[0, 2],
+        color = 'r'
+    )
+
+    axes.quiver(
+        *center,
+        axes_in[1, 0],
+        axes_in[1, 1],
+        axes_in[1, 2],
+        color = 'g'
+    )
+
+    axes.quiver(
+        *center,
+        axes_in[2, 0],
+        axes_in[2, 1],
+        axes_in[2, 2],
+        color = 'b'
+    )
+
+    # Name the axes and title
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
+    plt.title("Plot of points and 3 axes vectors")
+
+    plt.show()
+
+
+def plotPointsAndVectors(points, center, vectors, mean_vector):
+    """
+    Plot the given points, the center of the generated ellipsoid and its eigenvectors
+
+    Input:
+
+    """
+
+    # Prepare the figure
+    figure = plt.figure(figsize = plt.figaspect(1))
+    axes = figure.add_subplot(projection = '3d')
+
+    # Plot the points onto the figure
+    axes.scatter(
+        points[0, :],
+        points[1, :],
+        points[2, :],
+        s = 10,
+        c = 'blue',
+        alpha = 0.6
+    )
+
+    # Plot the vectors
+    axes.quiver(
+        points[0, ::100],
+        points[1, ::100],
+        points[2, ::100],
+        vectors[0, ::100],
+        vectors[1, ::100],
+        vectors[2, ::100],
+        color = 'g'
+    )
+
+    # Plot the center point to be destinct from the other points
+    axes.scatter(
+        center[0],
+        center[1],
+        center[2],
+        s = 250,
+        c = 'r',
+        alpha = 1.0
+    )
+
+    # Plot the mean vector at the center
+    axes.quiver(
+        *center,
+        mean_vector[0],
+        mean_vector[1],
+        mean_vector[2],
+        color = 'r'
+    )
+
+    # Name the axes and title
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
+    plt.title("Plot of points and vectors with mean vector at the center")
 
     plt.show()
 
@@ -46,23 +177,37 @@ def plotPointsAndPlane(points, center, normal):
     # https://stackoverflow.com/questions/3461869/plot-a-plane-based-on-a-normal-vector-and-a-point-in-matlab-or-matplotlib
     # The plane formula is a*x + b*y + c*z + d = 0
     # The normal is [a, b, c], we need to calculate d
-    d = -np.dot(normal, center)
+    a = normal[0]
+    b = normal[1]
+    c = normal[2]
+    d = -(a * center[0] + b * center[1] + c * center[2])
 
     # Set of all x and y values for the plane
-    xx, yy = np.meshgrid(range(100), range(100))
+    xx, yy = np.meshgrid(np.linspace(0.0, 1.0, 100), np.linspace(0.0, 1.0, 100))
 
     # Calculate corresponding z-value for each xx and yy
-    zz = (-normal[0] * xx - normal[1] * yy - d) * 1.0/normal[2]
+    zz = center[2] - (a * (xx - center[0]) + b * (yy - center[1])) / c
 
-    # plot the surface
+    # plot the plane
     axes.plot_surface(xx, yy, zz)
 
-    # Plot the plane
+    # Plot the normal vector at the center point
+    axes.quiver(
+        center[0],
+        center[1],
+        center[2],
+        normal[0],
+        normal[1],
+        normal[2],
+        color = 'red',
+        length = 0.2
+    )
 
     # Name the axes and title
-    plt.xlabel("X-Axis")
-    plt.ylabel("Y-Axis")
-    plt.title("Plot of points")
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
+    plt.title("Plot of points and plane")
 
     plt.show()
 
@@ -81,17 +226,11 @@ def plotPointsAndEllipsoid(points, center, ellipsoid_axes, ellipsoid_axes_length
     """
 
     # Prepare the figure
-    figure, axes = plt.subplots(
-        nrows = 1,
-        ncols = 2,
-        #sharex = True,
-        #sharey = True,
-        figsize = plt.figaspect(1),
-        subplot_kw = dict(projection = '3d')
-    )
+    figure = plt.figure(figsize = plt.figaspect(1))
+    axes = figure.add_subplot(projection = '3d')
 
     # Plot the points
-    axes[0].scatter(
+    axes.scatter(
         points[0, :],
         points[1, :],
         points[2, :],
@@ -101,7 +240,7 @@ def plotPointsAndEllipsoid(points, center, ellipsoid_axes, ellipsoid_axes_length
     )
 
     # Plot the center point to be destinct from the other points
-    axes[0].scatter(
+    axes.scatter(
         center[0],
         center[1],
         center[2],
@@ -112,13 +251,17 @@ def plotPointsAndEllipsoid(points, center, ellipsoid_axes, ellipsoid_axes_length
     )
 
     # Name the axes and title
-    axes[0].set_xlabel("X-Axis")
-    axes[0].set_ylabel("Y-Axis")
-    axes[0].set_title("Plot of points and the ellipsoid center point")
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
+    axes.set_title("Plot of points and the ellipsoid center point")
 
     # Set of all spherical angles:
     u = np.linspace(0, 2 * np.pi, 100)
     v = np.linspace(0, np.pi, 100)
+
+    # TODO: What if we take a unit circle and use the ellipsoid matrix to transform it?
+    # Will it create our ellipsoid?
 
     # Cartesian coordinates that correspond to the spherical angles on the ellipsoid:
     # This is the equation of an ellipsoid, from:
@@ -149,13 +292,8 @@ def plotPointsAndEllipsoid(points, center, ellipsoid_axes, ellipsoid_axes_length
             z[i][j] = new_v[2]  
 
     # Plot the ellipsoid
-    axes[1].scatter(center[0], center[1], center[2], s = 100, c = 'red')
-    axes[1].plot_surface(x, y, z,  rstride = 4, cstride = 4, color = 'g', alpha = 0.3)
-
-    # Name the axes and title
-    axes[1].set_xlabel("X-Axis")
-    axes[1].set_ylabel("Y-Axis")
-    axes[1].set_title("Plot of ellipsoid and the center point")
+    axes.scatter(center[0], center[1], center[2], s = 100, c = 'red')
+    axes.plot_surface(x, y, z, rstride = 4, cstride = 4, color = 'g', alpha = 0.3)
 
     plt.show()
 
@@ -199,8 +337,8 @@ def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
     # Create the ellipse
     ellipse = Ellipse(
         xy = (center[0], center[1]),
-        height = ellipse_axes_lengths[0],
-        width = ellipse_axes_lengths[1],
+        height = 2.0 *  ellipse_axes_lengths[0],
+        width = 2.0 * ellipse_axes_lengths[1],
         edgecolor = 'g',
         alpha = 0.3
     )
@@ -215,9 +353,11 @@ def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
     # Name the axes and title
     axes[1].set_xlabel("X-Axis")
     axes[1].set_ylabel("Y-Axis")
+    axes[1].set_zlabel("Z-Axis")
     axes[1].set_title("Plot of ellipse and the center point")
 
     plt.show()
+
 
 def plotPointsComp(points_1, points_2):
     """
@@ -239,8 +379,9 @@ def plotPointsComp(points_1, points_2):
     axes.scatter(points_2[0, :], points_2[1, :], points_2[2, :], c = 'blue')
 
     # Name the axes and title
-    plt.xlabel("X-Axis")
-    plt.ylabel("Y-Axis")
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
     plt.title("Two sets of points")
 
     plt.show()

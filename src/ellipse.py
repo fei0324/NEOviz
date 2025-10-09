@@ -61,10 +61,10 @@ def calcMveeEllipsoid(points):
     return H_matrix, center
 
 
-def calcEllipsoidParameters(center, ellipsoid_matrix):
+def calcEllipsoidParameters(ellipsoid_matrix):
     """
     Calculate the ellipsoid parameters given the ellipsoid_matrix representation of a
-    3D ellipsoid. The function would also work for a 2D ellipse.
+    3D ellipsoid. The function also works for a 2D ellipse.
 
     Input:
         ellipsoid_matrix: Matrix representation of a 3D ellipsoid (or 2D ellipse)
@@ -72,45 +72,63 @@ def calcEllipsoidParameters(center, ellipsoid_matrix):
     Output:
         axes: The normalized axes directions of the ellipsoid, starting with the 
               semi-major axis, and lastly the semi-minor axis
-        axes_lengths: The lengths of the ellipsoid axes in decending order (same as axes)
-        rotation_matrix: The rotation matrix of the ellipsoid
+        axes_lengths: The lengths of the ellipsoid axes in decending order (same order as
+                      the axes)
+        rotation_matrix: The rotation of the ellipsoid in matrix form
     """
 
-    # The eigenvalues and vectors of the ellipsoid matrix can be used to calculate the 
-    # axes of the principle directions of the ellipsoid and their lengths. 
+    # The ellipsoid_matrix must be symetric
+    assert np.allclose(ellipsoid_matrix, ellipsoid_matrix.T), "Matrix not symetric"
+    
+    # Singular value decomposition of the ellipsoid matrix. Q is the eigenvalues and S 
+    # and Vt are rotations
+    S, Q, Vt = np.linalg.svd(ellipsoid_matrix)
+
+    # The eigenvalues and eigenvectors of the ellipsoid matrix can be used to calculate
+    # the axes of the principle directions of the ellipsoid and their lengths.
+    # NOTE: We use the eigh function instead of eig since we know the matrix is symetric
     eigenvalues, eigenvectors = np.linalg.eigh(ellipsoid_matrix)
-    print("eigenvalues", eigenvalues)
-    print("eigenvectors", eigenvectors)
 
     # The eigenvectors of the ellipsoid matrix are always gonna be in the same direction 
-    # as the axes of the ellipsoid. The axis with the smallest absolute eigenvalue is the # semi-major axis. This is according to the principal axis theorem.
-    # From: https://en.wikipedia.org/wiki/Ellipsoid and
+    # as the axes of the ellipsoid. From: https://en.wikipedia.org/wiki/Ellipsoid and
     # https://en.wikipedia.org/wiki/Matrix_representation_of_conic_sections
-    axes = eigenvectors
+    axes = eigenvectors.T
+
+    # Flip the axes so that they are in the order from largest to smallest
+    # This is most likely need due to the transposing of the axes matrix.
+    # According to the documentation of np.linalg.eigh they should be in the right order 
+    # but they are not, so we flip them. This looks correct in the plots.
+    axes = np.flip(axes, axis = 0)
     
     # The lengths of the axes can be claulated using the eigenvalues with the formula:
-    # a = 1/(sqrt(eigenvalue[0]))
-    # (From: https://en.wikipedia.org/wiki/Ellipsoid)
-    axes_lengths = np.reciprocal(np.sqrt(eigenvalues))
+    # length = sqrt(eigenvalue) * 2 (since we want the "diameter" not the "radius")
+    # (From: https://math.stackexchange.com/questions/185954/finding-the-major-and-minor-axes-of-an-n-dimensional-ellipse)
+    axes_lengths = np.sqrt(eigenvalues) * 2.0
+
+    # Since we flip the axes we should flip the values too. Largest eigenvalue is the
+    # major axis
+    axes_lengths = np.flip(axes_lengths, axis = 0)
     
-    # Get the rotation
+    # The rotation matrix can be constructed by putting the axes into a matrix, i.e. the 
+    # axes matrix transposed. 
     rotation_matrix = axes.T
 
-    # The np.linalg.eigh function returns the eigenvalues in ascending order. Meaning 
-    # that the smallest eigenvalue is the first item, meaning that the cooresponding
-    # major axis is the first item
     return axes, axes_lengths, rotation_matrix
 
 
 def createEllipsoid(points, do_plotting, is_3d = True):
     """
-    Create an ellipsoid that encases all of the given points.
+    Create an ellipsoid that encases all of the given points. This function also work fr
+    2D input and will then instead create an ellipse that encases all the input points. 
 
     Input: 
-        points: The input point cloud in 3D
+        points: The input point cloud in 3D (or 2D)
+        do_plotting: Whether debug plots should be made or not
+        is_3d: Whether the inout data is in 3D or 2D
     Output:
         Ellipsoid:
-            ellipsoid_matrix: The matrix that representa this ellipsoid
+            ellipsoid_matrix: The matrix that representa this ellipsoid (or ellipse in
+                              case of 2D data)
             center: The center point of the ellipsoid
             axes: The normalized vectors that represent the directions of the axes of the 
                   ellipsoid
@@ -121,20 +139,23 @@ def createEllipsoid(points, do_plotting, is_3d = True):
     # Compute a minimum encasing ellipsoid for the points using mvee
     ellipsoid_matrix, center = calcMveeEllipsoid(points)
 
-    # Get the ellipsoid characteristics to be able to draw the shape
-    axes, axes_lengths, rotation_matrix = calcEllipsoidParameters(
-        center,
-        ellipsoid_matrix
-    )
+    # Get the ellipsoid shape characteristics
+    axes, axes_lengths, rotation_matrix = calcEllipsoidParameters(ellipsoid_matrix)
     
     # Plot the points together with the generated ellipsoid
-    # TODO: The ellipsoid parameters seem off. Ellipsoid is much bigger than the range of the points
     if do_plotting:
         if is_3d:
+            # TODO: The ellipsoid parameters seem off. Ellipsoid is much bigger than the
+            # range of the points and the rotation is slightly off
             print("3D ellipsoid axes", axes)
             print("3D ellipsoid axes lengths", axes_lengths)
             print("3D ellipsoid rotation", rotation_matrix)
 
+            # NOTE: Plot shows that the axes are in order smallest to largest, not largest to smallest as we thought.
+            # The sizes for the axes are VERY off, much larger that supposed to be
+            plotting.plotPointsAndAxes(points, center, axes)
+
+            # NOTE: Plot shows that the ellipsoid is larger and rotated wrong
             plotting.plotPointsAndEllipsoid(
                 points,
                 center,
@@ -176,8 +197,9 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
     Input:
         coordinates: The coordinates for the variants of this timestep
         velocities: The velocities for the variants of this timestep
-        mean_velocity: The mean velocity of the variants. This is the normal of the plane 
-                       that is perpendicular to the direction towards the Sun 
+        mean_velocity: The normalized mean velocity of the variants. This is the normal 
+                       of the plane that is perpendicular to the direction towards the 
+                       Sun 
         ellipsoid_center: The center of the ellipsoid that encases all the points
         do_plotting: Whether debug plots should be done or not
     Output:
@@ -185,41 +207,53 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
                             plane
         time_lags: The amount each variant is ahead/behind the plane slice
     """
-    # Calculate the intersection point for each variant with the mean plane using their
-    # velocity
+
+    # To store results
     plane_variant_intersections = np.zeros(coordinates.shape)
     time_lags = np.zeros(coordinates.shape[0])
+
+    # Calculate the intersection point for each variant with the plane using their 
+    # velocity
     for variant in range(coordinates.shape[0]):
         variant_coordinate = coordinates[:, variant]
         variant_velocity = velocities[:, variant]
+        variant_velocity_norm = variant_velocity / np.linalg.norm(variant_velocity)
 
+        # Find the intersection of this variant with the plane using its current velocity
+        # As long as the distance to the plane is rather short and no major body
+        # gravitationally interact with the variant, this should be a good approximation
         intersection_multiplier, intersection_coordinate = util.calcPlaneLineIntersection(
             mean_velocity,
             ellipsoid_center,
             variant_coordinate,
-            variant_velocity
+            variant_velocity_norm
         )
-
-        time_lags[variant] = intersection_multiplier
         plane_variant_intersections[:, variant] = intersection_coordinate
 
-    # Plot the old and new points
+        # The intersection_multiplier is an abstract value that tells how far behind or 
+        # ahead a variant are of the plane  
+        time_lags[variant] = intersection_multiplier
+
+    # Plot the original points and the new points to compare
     if do_plotting:
         plotting.plotPointsComp(coordinates, plane_variant_intersections)
 
-    # Transform the 3D plane to the XY plane to convert this to a 2D problem
+    # Transform the points on this 3D plane to the 2D XY plane to convert this to a
+    # 2D problem
     transformed_intersections_2d = util.transformPointsToXYPlane(
         plane_variant_intersections,
         ellipsoid_center,
         mean_velocity
     )
 
+    # Return the transformed points
     return transformed_intersections_2d, time_lags
 
 
-def sampleEllipse(center, ):
+# TODO: WIP
+def sampleEllipse(center):
     # Find a (semi)-stable starting point
-    center_2d_3d = np.array([center_2d[0], center_2d[1], 0])
+    center_2d_3d = np.array([center[0], center[1], 0])
     center_2d_3d = np.array([center_2d_3d]).T
     transformed_center_2d_3d = util.invTransformPointsToXYPlane(
         center_2d_3d,
@@ -261,26 +295,51 @@ def createEllipse(data, time, ssb_normal, do_plotting):
     print("\nTime", data.time_data[time])
     print("Time step number", time)
     
-    # Get the coordinate list for this timestep
+    # Get the variant coordinate list for this timestep. The coordinates are in meters 
+    # and relative the SUN (TODO: Or SSB need to check that)
     coordinates = data.variants_coordinates[time].T
 
     # Plot the points for this timestep
     if do_plotting:
         plotting.plotPoints(coordinates)
 
-    # Create ellipsoid
-    ellipsoid = createEllipsoid(coordinates, do_plotting, True)
+    # Normalize the points to be between 0 and 1 for better numerical stability
+    normalized_coordinates, offset, scaling_factors = util.normalizePoints(coordinates)
 
-    # Transform the points to be on the a plane that is perpendicular to the direction
-    # towards the Sun. The mean velocity vector is used as the normal of this plane
+    # Plot the normalized points for this timestep
+    if do_plotting:
+        plotting.plotPoints(normalized_coordinates)
+
+    # Create an ellipsoid data objects with all of the ellipsoid features
+    ellipsoid = createEllipsoid(normalized_coordinates, do_plotting, True)
+
+    # Transform all points to be on the a plane that is perpendicular to the direction
+    # towards the Sun. The mean velocity vector is used as the normal of this plane.
     velocities = data.variants_velocities[time].T
     mean_velocity = np.mean(velocities, axis = 1)
 
     if do_plotting:
-        plotting.plotPointsAndPlane(coordinates, ellipsoid.center, mean_velocity)
+        plotting.plotPointsAndVectors(
+            normalized_coordinates,
+            ellipsoid.center,
+            velocities,
+            mean_velocity
+        )
 
+    # Plot the points and the mean velocity plane
+    if do_plotting:
+        # TODO: This plot seems off too, all the points cluster together too tightly and 
+        # the plane is not visible
+        plotting.plotPointsAndPlane(
+            normalized_coordinates,
+            ellipsoid.center,
+            mean_velocity
+        )
+
+    # Transform all points to be on this plane, i.e. a slice of the tube going around the
+    # Sun. Then transform this plane to be on the XY plane, giving a 2D problem
     intersections_2d, time_lags = getPointsOnSlice(
-        coordinates,
+        normalized_coordinates,
         velocities,
         mean_velocity,
         ellipsoid.center,
@@ -291,12 +350,12 @@ def createEllipse(data, time, ssb_normal, do_plotting):
     # the XY plane
     ellipse = createEllipsoid(intersections_2d, do_plotting, False)
 
-    # Sample the ellipse to create the polygon
-    #sampleEllipse()
+    # Sample the ellipse to create the polygon that make up the tube
+    #samples = sampleEllipse()
 
     # Transform the ellipse back to the original 3D space
 
-    # Return the ready ellipse
+    # Return the samples of the ellipse in their correct 3D position
     # Dummy
     return np.array([0, 0, 1])
 

@@ -4,10 +4,46 @@ import spiceypy as spice
 EPSILON = 1e-5
 
 
+def normalizePoints(points):
+    """
+    Normalize the input points to be between 0 and 1 for each dimention and calculate the
+    scaling factor for each dimension
+
+    Input:
+        points: The points to normalize
+    Output:
+        normalized_points: The normalized points
+        offset: The offset for each dimension (minimum value)
+        scaling_factors: The scaling factor for each dimension
+    """
+
+    # Find the maximum and minimum of each axis pf the given points
+    min_x = np.min(points[0, :])
+    max_x = np.max(points[0, :])
+    min_y = np.min(points[1, :])
+    max_y = np.max(points[1, :])
+    min_z = np.min(points[2, :])
+    max_z = np.max(points[2, :])
+
+    # Normalize the points to be between 0 and 1 for each dimention
+    normalized_points = np.zeros(points.shape)
+    normalized_points[0, :] = (points[0, :] - min_x) / (max_x - min_x)
+    normalized_points[1, :] = (points[1, :] - min_y) / (max_y - min_y)
+    normalized_points[2, :] = (points[2, :] - min_z) / (max_z - min_z)
+
+    # Store the scaling factor for each dimesion
+    scaling_factors = np.array([max_x - min_x, max_y - min_y, max_z - min_z])
+    offsets = np.array([min_x, min_y, min_z])
+
+    # Return new set of points that are normalized and the scaling factors
+    return normalized_points, offsets, scaling_factors
+
+
 # Common math functions
 def projectVectorToPlane(vector, normal):
     """
     Projoect a vector onto a plane.
+
     Input:
         vector: The vector to project onto the plane
         normal: The normal of the plane to project the vector onto
