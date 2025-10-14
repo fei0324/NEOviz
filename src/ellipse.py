@@ -79,10 +79,6 @@ def calcEllipsoidParameters(ellipsoid_matrix):
 
     # The ellipsoid_matrix must be symetric
     assert np.allclose(ellipsoid_matrix, ellipsoid_matrix.T), "Matrix not symetric"
-    
-    # Singular value decomposition of the ellipsoid matrix. Q is the eigenvalues and S 
-    # and Vt are rotations
-    S, Q, Vt = np.linalg.svd(ellipsoid_matrix)
 
     # The eigenvalues and eigenvectors of the ellipsoid matrix can be used to calculate
     # the axes of the principle directions of the ellipsoid and their lengths.
@@ -95,9 +91,9 @@ def calcEllipsoidParameters(ellipsoid_matrix):
     axes = eigenvectors.T
 
     # Flip the axes so that they are in the order from largest to smallest
-    # This is most likely need due to the transposing of the axes matrix.
+    # This is most likely needed due to the transposing of the axes matrix.
     # According to the documentation of np.linalg.eigh they should be in the right order 
-    # but they are not, so we flip them. This looks correct in the plots.
+    # but they are not, so we flip them.
     axes = np.flip(axes, axis = 0)
     
     # The lengths of the axes can be claulated using the eigenvalues with the formula:
@@ -145,17 +141,15 @@ def createEllipsoid(points, do_plotting, is_3d = True):
     # Plot the points together with the generated ellipsoid
     if do_plotting:
         if is_3d:
-            # TODO: The ellipsoid parameters seem off. Ellipsoid is much bigger than the
-            # range of the points and the rotation is slightly off
             print("3D ellipsoid axes", axes)
             print("3D ellipsoid axes lengths", axes_lengths)
             print("3D ellipsoid rotation", rotation_matrix)
 
-            # NOTE: Plot shows that the axes are in order smallest to largest, not largest to smallest as we thought.
-            # The sizes for the axes are VERY off, much larger that supposed to be
+            # Plot the original points and the ellipsoid axes. Red should be the largest
+            # axis and blue should be the smallest axis
             plotting.plotPointsAndAxes(points, center, axes)
 
-            # NOTE: Plot shows that the ellipsoid is larger and rotated wrong
+            # Plot the original points and the ellipsoid as a transparent 3D shape
             plotting.plotPointsAndEllipsoid(
                 points,
                 center,
@@ -164,10 +158,15 @@ def createEllipsoid(points, do_plotting, is_3d = True):
                 rotation_matrix
             )
         else:
-            print("2D ellipsoid axes", axes)
-            print("2D ellipsoid axes lengths", axes_lengths)
-            print("2D ellipsoid rotation", rotation_matrix)
+            print("2D ellipse axes", axes)
+            print("2D ellipse axes lengths", axes_lengths)
+            print("2D ellipse rotation", rotation_matrix)
 
+            # Plot the points and the ellipse axes in 2D. Red should be the largest axis
+            # and blue should be the smallest axis
+            plotting.plotPointsAndAxes2D(points, center, axes)
+
+            # Plot the original points and the ellipse in 2D
             plotting.plotPointsAndEllipse(
                 points,
                 center,
@@ -210,14 +209,13 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
 
     # To store results
     plane_variant_intersections = np.zeros(coordinates.shape)
-    time_lags = np.zeros(coordinates.shape[0])
+    time_lags = np.zeros(coordinates.shape[1])
 
     # Calculate the intersection point for each variant with the plane using their 
     # velocity
-    for variant in range(coordinates.shape[0]):
+    for variant in range(coordinates.shape[1]):
         variant_coordinate = coordinates[:, variant]
         variant_velocity = velocities[:, variant]
-        variant_velocity_norm = variant_velocity / np.linalg.norm(variant_velocity)
 
         # Find the intersection of this variant with the plane using its current velocity
         # As long as the distance to the plane is rather short and no major body
@@ -226,7 +224,7 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
             mean_velocity,
             ellipsoid_center,
             variant_coordinate,
-            variant_velocity_norm
+            variant_velocity
         )
         plane_variant_intersections[:, variant] = intersection_coordinate
 
@@ -236,15 +234,25 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
 
     # Plot the original points and the new points to compare
     if do_plotting:
-        plotting.plotPointsComp(coordinates, plane_variant_intersections)
+        plotting.plotPointsCompAndPlane(
+            coordinates,
+            plane_variant_intersections,
+            mean_velocity,
+            ellipsoid_center
+        )
 
     # Transform the points on this 3D plane to the 2D XY plane to convert this to a
     # 2D problem
     transformed_intersections_2d = util.transformPointsToXYPlane(
         plane_variant_intersections,
         ellipsoid_center,
-        mean_velocity
+        mean_velocity,
+        do_plotting
     )
+
+    # Plot the points in 2D
+    if do_plotting:
+        plotting.plotPoints2D(transformed_intersections_2d)
 
     # Return the transformed points
     return transformed_intersections_2d, time_lags
@@ -315,24 +323,16 @@ def createEllipse(data, time, ssb_normal, do_plotting):
 
     # Transform all points to be on the a plane that is perpendicular to the direction
     # towards the Sun. The mean velocity vector is used as the normal of this plane.
+    # TODO: Should I normalize the velocities too? Or does it matter? 
     velocities = data.variants_velocities[time].T
     mean_velocity = np.mean(velocities, axis = 1)
 
+    # Plot the points and the axes of the ellipsoid
     if do_plotting:
         plotting.plotPointsAndVectors(
             normalized_coordinates,
             ellipsoid.center,
             velocities,
-            mean_velocity
-        )
-
-    # Plot the points and the mean velocity plane
-    if do_plotting:
-        # TODO: This plot seems off too, all the points cluster together too tightly and 
-        # the plane is not visible
-        plotting.plotPointsAndPlane(
-            normalized_coordinates,
-            ellipsoid.center,
             mean_velocity
         )
 

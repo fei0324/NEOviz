@@ -1,7 +1,9 @@
 import numpy as np
 import spiceypy as spice
 
-EPSILON = 1e-5
+import src.plotting as plotting
+
+EPSILON = 1e-10
 
 
 def normalizePoints(points):
@@ -47,167 +49,159 @@ def projectVectorToPlane(vector, normal):
     Input:
         vector: The vector to project onto the plane
         normal: The normal of the plane to project the vector onto
-
     Output: The input vector projected onto the input plane
     """
                     
     return vector - ((np.dot(vector, normal) / np.dot(normal, normal)) * normal)
 
 
-def transformPoint(point, translation, rotation_matrix):
+def transformPointToXYPlane(point, translation, rotation_matrix):
     """
-    Transform the input point with the given translation and rotation
+    Transform the input point with the given translation and rotation onto the XY plane.
 
     Input:
         point: A point to transform 
-        translation: The translation to apply for the transform
-        rotation_matrix: The rotation to apply for the transform
-
-    Output: The transformed point
+        translation: The translation to get the point to the XY plane
+        rotation_matrix: The rotation matrix to rotate the point to the XY plane
+    Output: The transformed point on the XY plane
     """
 
-    # First apply the rotation
-    rotated_point = rotation_matrix @ point
+    # First translate the point to the origin
+    translated_point = point - translation  
 
-    # Then translate the point
-    return rotated_point + translation
+    # And then rotate it to the XY plane
+    return rotation_matrix @ translated_point
 
 
-def invTransformPoint(point, original_translation, original_rotation_matrix):
+def calcRotationMatrix(vector, target_vector):
     """
-    Inversely transform the input point with the given translation and rotation.
-    The given point has previously been transformed with the same input, this function
-    reverese that transformation
+    Calculate the rotation matrix that rotates the input vector to be aligned with the
+    target vector using the Rodrigues rotation formula.
 
     Input:
-        point: A point to inverse the previous transform
-        original_translation: The translation that has already been applied to the input
-                              point. This is the translation to reverse to apply the
-                              inverse transform. 
-        original_rotation_matrix: The rotation that has previously been applies and 
-                                  should be inversed.
-    Output: The inversely transformed point
+        vector: The vector to rotate
+        target_vector: The target vector to align the input vector with (normalized)
+    Output: The rotation matrix that rotates the input vector to be aligned with the
+            target vector
     """
-
-    # First translate it back 
-    translated_point = rotated_point - original_translation
     
-    # Then rotate the point the other direction
-    return np.linalg.inv(original_rotation_matrix) @ translated_point
+    # Normalize the input vector
+    vector = vector / np.linalg.norm(vector)
+
+    # Find the axis of rotation
+    rotation_axis = np.cross(vector, target_vector)
+
+    # Caclulate the skew-symmetric cross-product matrix of the rotation axis
+    K = np.array([
+        [0, -rotation_axis[2], rotation_axis[1]],
+        [rotation_axis[2], 0, -rotation_axis[0]],
+        [-rotation_axis[1], rotation_axis[0], 0]
+    ]) / np.linalg.norm(rotation_axis)
+
+    # Prepare the rotation matrix parameters
+    cos_a = np.dot(vector, target_vector)
+    sin_a = np.linalg.norm(rotation_axis)
+
+    # Calculate the rotation matrix 
+    # Formula from: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+    return np.eye(3) + K * sin_a + K @ K * (1 - cos_a)
 
 
-def calcXYPlaneRotationMatrix(normal):
-    """
-    Get the rotation matrix to rotate a plane with the given input normal to the XY plane
-    with a normal of (0, 0, 1)
+# TODO: This function is not used at the moment, but I will keep it around for some time
+# In case the Rodrigues rotation matrix approach doesn't work as expected
+def transformPointToXYPlaneOrtho(point, plane_center, plane_normal):
+    # Put the camera stright in front of the plane
+    camera_pos = plane_center + (plane_normal / np.linalg.norm(plane_normal))
 
-    Input:
-        normal: The normal of the 3D plane that should be rotated to the XY plane
-    Output:
-        rotation_matrix: The 3D rotation matrix to rotate the input plane to the XY plane
-    """
+    # Set the camera to look at the plane center
+    camera_direction = -plane_normal / np.linalg.norm(plane_normal)
 
-    # Rotation matrix formula:
-    # matrix = [
-    #   [cos(theta) + u1^2*(1 - cos(theta)), u1*u2*(1 - cos(theta)), u2*sin(theta)], 
-    #   [u1*u2*(1 - cos(theta)), cos(theta) + u2^2*(1 - cos(theta)), -u1*sin(theta)],
-    #   [-u2*sin(theta), u1*sin(theta), cos(theta)]    
-    # ]
-    # From:
-    # https://math.stackexchange.com/questions/1167717/transform-a-plane-to-the-xy-plane
+    # Get the right direction of the camera
+    # We get this by crossing the camera direction with the world up vector
+    camera_right = np.cross(camera_direction, np.array([0, 1, 0]))
 
-    # Where:
-    # normal = (a, b, c)
-    a = normal[0]
-    b = normal[1]
-    c = normal[2]
+    # Now get the actual up vector of the camera
+    camera_up = np.cross(camera_right, camera_direction)
 
-    # theta is the angle betweeen the translated_plane_normal and the normal of the XY plane
-    # cos(theta) = c/sqrt(a^2+b^2+c^2) -> c/|translated_plane_normal|
-    cos_theta = c/np.linalg.norm(normal)
-
-    # sin(theta) = sqrt((a^2+b^2)/(a^2+b^2+c^2)) -> sqrt(1 - cos(theta)^2)
-    sin_theta = np.sqrt(1 - cos_theta**2)
-
-    # u1 = b/sqrt(a^2+b^2)
-    u1 = b/np.sqrt(a**2 + b**2)
-
-    # u2 = −a/sqrt(a^2+b^2)
-    u2 = -a/np.sqrt(a**2 + b**2)
-
-    # Construct the rotation matrix
-    rotation_matrix = np.array([
-        [cos_theta + u1**2 * (1 - cos_theta), u1*u2*(1 - cos_theta), u2*sin_theta], 
-        [u1*u2*(1 - cos_theta), cos_theta + u2**2 * (1 - cos_theta), -u1*sin_theta],
-        [-u2*sin_theta, u1*sin_theta, cos_theta] 
+    # Create a look at matrix, i.e. the view matrix
+    look_at = np.array([
+        [camera_right[0], camera_right[1], camera_right[2], 0],
+        [camera_up[0], camera_up[1], camera_up[2], 0],
+        [camera_direction[0], camera_direction[1], camera_direction[2], 0],
+        [0, 0, 0, 1]
+    ])
+    view_matrix = look_at @ np.array([
+        [ 1, 0, 0, -camera_pos[0]],
+        [ 0, 1, 0, -camera_pos[1]],
+        [ 0, 0, 1, -camera_pos[2]],
+        [ 0, 0, 0, 1]
     ])
 
-    return rotation_matrix
+    # Setup parameters for the orthografic projection matrix
+    top = 1.5
+    bottom = -1.5
+    right = 1.5
+    left = -1.5
+    near = 0.1
+    far = 5.0
+
+    # Calculate the orthografic projection matrix
+    ortho_matrix = np.array([
+        [2 / (right - left), 0, 0, -(right + left) / (right - left)],
+        [0, 2/(top - bottom), 0, -(top + bottom) / (top - bottom)],
+        [0, 0, -2/(far - near), -(far + near) / (far - near)],
+        [0, 0, 0, 1]
+    ])
+    
+    # Apply the camera transformations to the point
+    point_clip = ortho_matrix @ view_matrix @ np.array([point[0], point[1], point[2], 1])
+
+    # Perform perspective division to get the normalized device coordinates
+    # For orthographic projection this doesn't change the coordinates
+    # Therefore we just return the x, y, and z coordinates and ignore the w coordinate
+    return point_clip[:3]
 
 
-def transformPointsToXYPlane(points, plane_center, plane_normal):
+def transformPointsToXYPlane(points, plane_center, plane_normal, do_plotting):
     """
     Transform the input points on the given plane to the XY plane. The input plane is
-    defined by the its center point and normal. The XY plane have a normal of (0, 0, 1)
+    defined by its center point and normal. The XY plane have a normal of (0, 0, 1)
 
     Input:
         points: A list of points on the input plane to transform onto the XY-plane
         plane_center: The center point of the input plane. This point must be part of the 
                       input plane.
         plane_normal: The normal of the input plane
+        do_plotting: Whether to do plotting or not
 
-    Output: The transformed points on the XY plane
+    Output: The transformed points on the XY plane in 2D
     """
 
     # The translation is the same as the plane center vector
     translation = plane_center
-    translated_plane_normal = plane_normal - translation
 
-    # Find the rotation matrix to rotate the input plane to the XY plane
-    rotation_matrix = calcXYPlaneRotationMatrix(translated_plane_normal)
+    # Find the rotation matrix to rotate the plane normal to be aligned with the Z axis
+    rotation_matrix = calcRotationMatrix(plane_normal, np.array([0, 0, 1]))
 
     # Apply the transformation to all points
+    transformed_points = np.zeros(points.shape)
     for p in range(points.shape[1]):
-        transformPoint(points[:, p], -translation, rotation_matrix)
+        transformed_points[:, p] = transformPointToXYPlane(
+            points[:, p],
+            translation,
+            rotation_matrix
+        )
+    
+    # Plot the result if requested
+    if do_plotting:
+        plotting.plotPoints(transformed_points)
 
     # Check that all points are on the XY plane
     for p in range(points.shape[1]):
-        print("transformed point", points[:, p])
-        print("Z", points[2, p])
-        assert np.abs(points[2, p]) < EPSILON, "Not on XY plane"
+        assert np.abs(transformed_points[2, p]) < EPSILON, "Not on XY plane"
 
     # Return the XY coordinates of the transformed points
-    return points[:2, :]
-
-
-def invTransformPointsToXYPlane(points, original_plane_center, original_plane_normal):
-    """
-    Inversely transform the input points on the XY plane to the original plane in 3D.
-    The original plane is defined by the its center point and normal. The XY plane have a
-    normal of (0, 0, 1)
-
-    Input:
-        points: A list of points on XY plane that previously have been transformed from
-                the original plane
-        original_plane_center: The center point of the original plane. This point must be 
-                            part of the original plane.
-        plane_normal: The normal of the original plane
-
-    Output: The transformed points on the XY plane
-    """
-
-    # The translation is the same as the original plane center vector
-    translation = original_plane_center
-    translated_plane_normal = original_plane_normal - translation
-
-    # Find the rotation matrix to rotate the original plane to the XY plane
-    rotation_matrix = calcXYPlaneRotationMatrix(translated_plane_normal)
-
-    # Apply the inverse transformation to all points
-    for p in range(points.shape[1]):
-        invTransformPoint(points[:, p], -translation, rotation_matrix)
-
-    return points
+    return transformed_points[:2, :]
 
 
 def calcPlaneLineIntersection(normal, center, line_start, line_direction):
@@ -215,10 +209,10 @@ def calcPlaneLineIntersection(normal, center, line_start, line_direction):
     Compute the intersection point between the given plane and the given line
 
     Input:
-        normal: The normal of the plane (not normalized)
+        normal: The normal of the plane (normalized)
         center: The center point of the plane (a point on the plane)
         line_start: The starting point of the line
-        line_direction: The direction of the line (not normalized)
+        line_direction: The direction of the line (normalized)
     
     Output:
         multiplier: The multiplier of the line_direction that is requiered for the 
@@ -231,10 +225,10 @@ def calcPlaneLineIntersection(normal, center, line_start, line_direction):
     
     # Calculate the multiplier of the line direction to makes the point be on the plane
     # Formula from: https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
-    multiplier = np.dot((center - line_start), normal) / np.dot(line_direction, normal)
+    multiplier = (np.dot(normal, center) - np.dot(normal, line_start)) / np.dot(normal, line_direction)
 
     # The calculate the coordinate of the intersection point
-    intersection = line_start + np.multiply(multiplier, line_direction)
+    intersection = line_start + line_direction * multiplier
     
     return multiplier, intersection
 
