@@ -258,35 +258,175 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
     return transformed_intersections_2d, time_lags
 
 
-# TODO: WIP
-def sampleEllipse(center):
-    # Find a (semi)-stable starting point
-    center_2d_3d = np.array([center[0], center[1], 0])
-    center_2d_3d = np.array([center_2d_3d]).T
-    transformed_center_2d_3d = util.invTransformPointsToXYPlane(
-        center_2d_3d,
-        center_3d,
-        mean_velocity
-    )
-    start_angle = calcSamplingStartingPoint(
-        ssb_normal,
-        transformed_center_2d_3d[0],
-        mean_velocity,
-        axes_2d[0]
-    )
-    print("Start angle", start_angle)
+def findStartingPoint(ssb_normal, center_3D, mean_velocity):
+    """
+    Find the starting point on the ellipse where the given vector intersects the ellipse.
+    The vector should be given in 2D space.
+    Input:
+        ssb_normal: The vector to find the intersection point with the ellipse
+        center: The center of the ellipse
+        axes: The normalized axes of the ellipse
+        axes_lengths: The lengths of the axes of the ellipse
+    Output:
+        intersection_point: The intersection point on the ellipse
+    """
 
-    # Compute ellipse meta data
-    # Texture coordinates and position texture
-    # timelag texture
-    # Density on the edges of the ellipse
+    # Normalize the SSB vector
+    ssb_vector = ssb_normal / np.linalg.norm(ssb_normal)
+
+    # Project this 3D vector onto the 3D plane of the mean velocity
+    # TODO: Debug the projection function to make sure it creates a vector that is on the plane
+    ssb_vector_on_plane = util.projectVectorToPlane(ssb_vector, mean_velocity)
+
+    # Transform this 3D vector on the mean velocity plane to the XY plane (2D)
+    # TODO: Debug this. The assetion for being on the XY plane fails
+    ssb_vector_2d = util.transformPointsToXYPlane(
+        np.array([ssb_vector_on_plane]).T,
+        center_3D,
+        mean_velocity,
+        False
+    )
+
+    # Find the starting point on the 2D ellipse. I.e where this vector meets the ellipse.
+    # This needs to consistently chosse the intersection point in the positive direction
+    # of the SSB vector.
+
+
+def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_normal,
+                  center_3D, mean_velocity, do_plotting, precision = 1000):
+    """
+    Sample the 2D ellipse on the 3D mean velocity plane in a consistent manner so that
+    the points are always in the same order. The sampling should start from the
+    intersection point of the projected SSB vector onto the plane and then go clockwise
+    around the ellipse with each sample being equal arc distance between each other.
+
+    Input:
+        num_samples: The number of samples to take on the ellipse
+        center_2D: The center of the ellipse in 2D space
+        axes_lengths: The lengths of the axes of the ellipse in 2D
+        rotation_matrix: The rotation matrix of the ellipse in 2D
+        ssb_normal: The SSB vector in 3D world space
+        center: The center of the ellipsoid in 3D world space (should be very similar to
+                center_2D in 3D world space)
+        mean_velocity: The normal vector of the mean velocity plane
+        do_plotting: Whether or not to do debug plotting
+        precision: The precision to use when calculating the circumference of the 
+                   ellipse. Higher values give better precision (default is 1000).
+
+    Output:
+        sampled_points_3D: The sampled points in order on the 2D ellipse in 3D world space
+        meta_data: Meta data about the sampled points
+    """
+
+    # 1. Sample the ellipse in 2D starting from the top of the Y axis on the standard
+    # ellipse and going clockwise with equal arc distance between each points
+    
+    # To simplify the formulas we define a and b
+    a = axes_lengths[0]
+    b = axes_lengths[1]
+
+    # Calculate the total circumference of the ellipse to then divide it into points with
+    # equal arc distance between each point
+    circumference = 4.0*a
+
+    # Need to compute the integral numerically, therefore we divide the circumfrance into
+    # many smaller parts to approximate it. We only need to compute a quarter of the
+    # circumfrance and then multiply it by 4 since ellipses are symetric
+    theta_theta = np.linspace(0, np.pi/2.0, precision)
+    d_theta = np.pi/(2.0 * precision)
+
+    # Approximate the circumference by integrating the complete elliptic integral of the
+    # second kind (Ee). From:
+    # https://en.wikipedia.org/wiki/Elliptic_integral#Complete_elliptic_integral_of_the_second_kind and
+    # https://math.stackexchange.com/questions/172766/calculating-equidistant-points-around-an-ellipse-arc
+    Ee = 0.0
+    for theta in theta_theta:
+        Ee += np.sqrt(1 - np.sin(theta)**2 * (1 - b**2/a**2)) * d_theta
+    circumference *= Ee
+
+    # To sample the ellipse we need to walk along the full ellipse and not just a quarter
+    # of it but lets keep the precision the same as before. i.e. 4 times the previous
+    # precision to keep the same step size
+    theta_theta = np.linspace(0, 2.0*np.pi, 4*precision)
+    
+    # The formula for where to put a sample is: iC/n = a * Em(phi) where i is the sample
+    # index [0, n[, C is the total circumference, and n is the total number of
+    # samples. We simplify this to iC/na = Em(phi). We need then to solve the incomplete
+    # elliptic integral of the second kind for the angle phi, Em(phi). From:
+    # https://en.wikipedia.org/wiki/Elliptic_integral#Incomplete_elliptic_integral_of_the_second_kind and
+    # https://math.stackexchange.com/questions/172766/calculating-equidistant-points-around-an-ellipse-arc
+    target_Em = circumference / (num_samples * a)
+    max_Em = target_Em * num_samples
+
+    # Start at i = 0 (phi = 0) and accumulate the Em until we reach the desired Em and
+    # save a sample point. Next increment the target Em and repeat until we have all
+    # samples. Make sure we do not go outside the bounds of the ellipse
+    # TODO: Store the x and y in one 2D array instead of two separate ones
+    sampled_points_x = []
+    sampled_points_y = []
+    Em_accumulated = 0.0
+    i = 0
+    for theta in theta_theta:
+        Em_accumulated += np.sqrt(1 - np.sin(theta)**2 * (1 - b**2/a**2)) * d_theta
+
+        # Stop if we have reached the maximum Em
+        if (Em_accumulated > max_Em):
+            break
+
+        if (Em_accumulated >= target_Em * i):
+            # We have reached the desired Em, take this angle as a desired angle to
+            # sample (phi) and sample a point along the ellipse here
+            phi = theta
+            x = a*np.sin(phi)
+            y = b*np.cos(phi)
+            sampled_points_x.append(x)
+            sampled_points_y.append(y)
+
+            # Increment to target teh arc lnegth of the next sample
+            i += 1
+
+            # Stop if we have reached the desired number of samples
+            if (i >= num_samples):
+                break
+    
+    # The samples are now located with equal arc distance between them around a standard
+    # ellipse at the origin. The semi-major axis is along the X axis and the semi-minor
+    # axis along the Y axis. We need to rotate and translate these points to be in the
+    # correct position to select the starting point correctly
+    sampled_points = np.array([sampled_points_x, sampled_points_y])
+    for point in range(sampled_points.shape[1]):
+        # Rotate the point using the rotation matrix of the ellipse
+        sampled_points[:, point] = rotation_matrix @ sampled_points[:, point]
+
+        # Translate the point using the center of the ellipse
+        sampled_points[:, point] = sampled_points[:, point] + center_2D
+
+    # Plot the samples. The plotting code will translate and rotate the ellipse, but we
+    # have to translate and rotate the points ourselves (which we have done above)
+    plotting.plotEllipseSamples(
+        sampled_points,
+        center_2D,
+        axes_lengths, 
+        rotation_matrix
+    )
+
+    # 2. Find the starting point on the ellipse using the SSB vector and reorder the
+    # samples accordingly
+
+    # 6. Compute meta data of the ellipse in 2D space
+    # 7. Inverse transform the sampled 2D points back to 3D space
+    # 8. Return the sampled 3D points and their meta data
+
+
+    # Ellipse meta data:
+    # Texture coordinates
+    # Density
+    # Timelag
     # etc.
 
     return None
 
 
-# TODO: Add DEBUG plotting code
-# TODO: Split up into smaller steps and functions
 def createEllipse(data, time, ssb_normal, do_plotting):
     """
     Create just one ellipse in the tube
@@ -351,7 +491,17 @@ def createEllipse(data, time, ssb_normal, do_plotting):
     ellipse = createEllipsoid(intersections_2d, do_plotting, False)
 
     # Sample the ellipse to create the polygon that make up the tube
-    #samples = sampleEllipse()
+    num_samples = 80
+    samples = sampleEllipse(
+        num_samples,
+        ellipse.center,
+        ellipse.axes_lengths,
+        ellipse.rotation_matrix,
+        ssb_normal,
+        ellipsoid.center,
+        mean_velocity,
+        do_plotting
+    )
 
     # Transform the ellipse back to the original 3D space
 

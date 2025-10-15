@@ -374,13 +374,21 @@ def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
     # This is the equation of an ellipse, from:
     # https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot
     # and https://en.wikipedia.org/wiki/Ellipse
-    xx = center[0] + ellipse_axes_lengths[0]*np.cos(rr)
-    yy = center[1] + ellipse_axes_lengths[1]*np.sin(rr)
+    xx = ellipse_axes_lengths[0]*np.cos(rr)
+    yy = ellipse_axes_lengths[1]*np.sin(rr)
 
     # Apply the rotation of the ellipsoid
     for i in range(xx.shape[0]):
         v = np.array([xx[i], yy[i]])
         new_v = rotation_matrix @ v
+
+        xx[i] = new_v[0]
+        yy[i] = new_v[1]
+
+    # Translate the ellipse
+    for i in range(xx.shape[0]):
+        v = np.array([xx[i], yy[i]])
+        new_v = v + center
 
         xx[i] = new_v[0]
         yy[i] = new_v[1]
@@ -460,3 +468,77 @@ def plotPointsCompAndPlane(points_1, points_2, normal, center):
     plt.title("Two sets of points and the plane that the red points should be on")
 
     plt.show()
+
+
+def plotEllipseSamples(samples, center, ellipse_axes_lengths, rotation_matrix):
+    """
+    Plot the given samples with the ellipse that they sample
+
+    Input:
+        samples: A 2D point could of points on the ellipse
+        center: The center point of the ellipse
+        ellipse_axes_lengths: The axes lengths of the ellipse to plot
+        rotation_matrix: The rotation of the ellipse
+    """
+
+    # Prepare the figure
+    figure, axes = plt.subplots(figsize = plt.figaspect(1))
+
+    # Plot the samples
+    axes.scatter(
+        samples[0, :],
+        samples[1, :],
+        s = 100,
+        linewidths = 3.0,
+        c = 'blue',
+        alpha = 0.2
+    )
+
+    # Plot the center point to be destinct from the other points
+    axes.scatter(
+        center[0],
+        center[1],
+        s = 250,
+        
+        c = 'red',
+        marker = 'x',
+        alpha = 1.0
+    )
+
+    # Set of all radial angles:
+    rr = np.linspace(0, 2 * np.pi, 100)
+
+    # Cartesian coordinates that correspond to the radial angles on the ellipse:
+    # This is the equation of an ellipse, from:
+    # https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot
+    # and https://en.wikipedia.org/wiki/Ellipse
+    xx = ellipse_axes_lengths[0]*np.cos(rr)
+    yy = ellipse_axes_lengths[1]*np.sin(rr)
+
+    # Apply the rotation of the ellipse
+    for i in range(xx.shape[0]):
+        v = np.array([xx[i], yy[i]])
+        new_v = rotation_matrix @ v
+
+        xx[i] = new_v[0]
+        yy[i] = new_v[1]
+
+    # Translate the ellipse
+    for i in range(xx.shape[0]):
+        v = np.array([xx[i], yy[i]])
+        new_v = v + center
+
+        xx[i] = new_v[0]
+        yy[i] = new_v[1]
+
+    # Plot the ellipse
+    plt.plot(xx, yy, color = 'g')
+
+    # Name the axes and title
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_xlim(-2, 2)
+    axes.set_ylim(-2, 2)
+    axes.set_title("Plot of samples along an ellipse")
+
+    plt.show()                       
