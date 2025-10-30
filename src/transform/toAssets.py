@@ -1,6 +1,6 @@
 from jinja2 import Template 
 import sys
-from jinjaData.data_dummy import keyframes # Replace with input folder and filename
+from jinjaData.jinja_2023_CX1 import keyframes # Replace with input folder and filename
 
 # Requires pip install Jinja2
 
@@ -80,9 +80,9 @@ local EllipsoidRotation = {
     ["{{ keyframe.time }}"] = {
       Type = "StaticRotation",
       Rotation = {
-        {{ keyframe.x1 }}, {{ keyframe.x2 }}, {{ keyframe.x3 }},
-        {{ keyframe.y1 }}, {{ keyframe.y2 }}, {{ keyframe.y3 }},
-        {{ keyframe.z1 }}, {{ keyframe.z2 }}, {{ keyframe.z3 }}
+        {{ keyframe.x1 }}, {{ keyframe.y1 }}, {{ keyframe.z1 }},
+        {{ keyframe.x2 }}, {{ keyframe.y2 }}, {{ keyframe.z2 }},
+        {{ keyframe.x3 }}, {{ keyframe.y3 }}, {{ keyframe.z3 }}
       }
     }, {% endfor %}
   }
@@ -136,15 +136,15 @@ def writeAssetFile(filename, asset):
   file.close()
 
 def main():
-  transformsOutputFilename = "./transforms/transforms_dummy.asset"
-  ellipsoidOutputFilename = "./ellipsoids/ellipsoids_dummy.asset"
+  transformsOutputFilename = "./transforms/transforms_2023_CX1.asset"
+  ellipsoidOutputFilename = "./ellipsoids/ellipsoids_2023_CX1.asset"
 
   # Data for the template, replace the items on the right to whatever you want
   data = {
-    "id": "Dummy_Test", # Cannot contain spaces or any special characters
-    "name": "Dummy Test",
-    "gui_path": "Test",
-    "transforms_filename": "transforms_dummy",
+    "id": "2023_CX1", # Cannot contain spaces or any special characters
+    "name": "2023 CX1",
+    "gui_path": "B612",
+    "transforms_filename": "transforms_2023_CX1.asset",
     "keyframes": keyframes
   }
 

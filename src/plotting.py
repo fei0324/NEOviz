@@ -2,382 +2,425 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plotPoints(points):
+def plotPoint3D(axes, point, size = 10, color = "blue", alpha = 1.0, marker = 'o',
+                edgecolor = "face", is_normalized = True):
     """
-    Plot the given points
+    Plot the given 3D point onto the given figure coordinates. The caller can then show
+    or save the figure. Or they can add more plotting to the same figure.
 
     Input:
-        points: A 3D point could of points to plot
+        axes: The figure axes to plot onto
+        point: A 3D point to plot
+        size: The size of the point to plot
+        color: The color of the point to plot
+        alpha: The alpha transparency of the point to plot
+        marker: The marker style of the point to plot
+        edgecolor: The edge color of the point to plot
+        is_normalized: Whether the point is normalized between 0 and 1 or not
     """
 
-    # Prepare the figure
-    figure = plt.figure(figsize = plt.figaspect(1))
-    axes = figure.add_subplot(projection = '3d')
+    # Plot the point onto the figure
+    points = np.zeros((3, 1))
+    points[0, :] = point[0]
+    points[1, :] = point[1]
+    points[2, :] = point[2]
+    plotPoints3D(
+        axes,
+        points,
+        size,
+        color,
+        alpha,
+        marker,
+        edgecolor,
+        is_normalized
+    )
 
-    # Plot the points onto the figure
-    axes.scatter(points[0, :], points[1, :], points[2, :], c = 'blue')
 
-    # Name the axes and title
-    axes.set_xlabel("X-Axis")
-    axes.set_ylabel("Y-Axis")
-    axes.set_zlabel("Z-Axis")
-    plt.title("Plot of points")
-
-    plt.show()
-
-
-def plotPoints2D(points):
+def plotPoints3D(axes, points, size = 10, color = "blue", alpha = 1.0, marker = 'o',
+                 edgecolor = "face", is_normalized = True):
     """
-    Plot the given points
+    Plot the given 3D points onto the given figure axes. The caller can then show
+    or save the figure. Or add more plots to the same figure. 
 
     Input:
-        points: A 3D point could of points to plot
+        axes: The figure axes to plot onto
+        points: A 3D point cloud with points to plot
+        size: The size of the points to plot
+        color: The color of the points to plot
+        alpha: The alpha transparency of the points to plot
+        marker: The marker style of the points to plot
+        edgecolor: The edge color of the points to plot
+        is_normalized: Whether the points are normalized between 0 and 1 or not
     """
-
-    # Prepare the figure
-    figure, axes = plt.subplots(figsize = plt.figaspect(1))
-
-    # Plot the points onto the figure
-    axes.scatter(points[0, :], points[1, :], c = 'blue')
-
-    # Name the axes and title
-    axes.set_xlabel("X-Axis")
-    axes.set_ylabel("Y-Axis")
-    axes.set_xlim(-1, 1)
-    axes.set_ylim(-1, 1)
-    plt.title("Plot of points")
-
-    plt.show()
-
-
-def plotPointsAndAxes(points, center, axes_in):
-    """
-    Plot the given points, the center of the generated ellipsoid and its eigenvectors
-
-    Input:
-        points: A 3D point could of points to plot
-        center: A 3D point that is the center of the ellipsoid
-        points: A set of 3 axes vectors that are the eigenvectors of the ellipsoid
-    """
-
-    # Prepare the figure
-    figure = plt.figure(figsize = plt.figaspect(1))
-    axes = figure.add_subplot(projection = '3d')
 
     # Plot the points onto the figure
     axes.scatter(
         points[0, :],
         points[1, :],
         points[2, :],
-        s = 10,
-        c = 'blue',
-        alpha = 0.6
+        s = int(size),
+        c = color,
+        alpha = alpha,
+        marker = marker,
+        edgecolors = edgecolor
     )
 
-    # Plot the center point to be destinct from the other points
+    # Name the axes and title
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+    axes.set_zlabel("Z-Axis")
+
+    # If we know that teh points are normalized we can set the axes limits directly
+    if is_normalized:
+        axes.set_xlim(0, 1)
+        axes.set_ylim(0, 1)
+        axes.set_zlim(0, 1)
+
+
+def plotPoint2D(axes, point, size = 10, color = "blue", alpha = 1.0, marker = 'o',
+                edgecolor = "face", is_normalized_neg = True):
+    """
+    Plot the given 2D point onto the given figure coordinates. The caller can then show
+    or save the figure.
+
+    Input:
+        axes: The figure axes to plot onto
+        point: A 2D point to plot
+        size: The size of the point to plot
+        color: The color of the point to plot
+        alpha: The alpha transparency of the point to plot
+        marker: The marker style of the point to plot
+        edgecolor: The edge color of the point to plot
+        is_normalized_neg: Whether the point is normalized between -1 and 1 or not
+    """
+
+    # Plot the point onto the figure
+    points = np.zeros((2, 1))
+    points[0, :] = point[0]
+    points[1, :] = point[1]
+    plotPoints2D(
+        axes,
+        points,
+        size,
+        color,
+        alpha,
+        marker,
+        edgecolor,
+        is_normalized_neg
+    )
+    
+
+def plotPoints2D(axes, points, size = 10, color = "blue", alpha = 1.0, marker = 'o',
+                 edgecolor = "face", is_normalized_neg = True):
+    """
+    Plot the given 2D points onto the given figure coordinates. The caller then can show
+    or save the figure.
+
+    Input:
+        axes: The figure axes to plot onto
+        points: A 2D point could of points to plot
+        size: The size of the points to plot
+        color: The color of the points to plot
+        alpha: The alpha transparency of the points to plot
+        marker: The marker style of the points to plot
+        edgecolor: The edge color of the points to plot
+        is_normalized_neg: Whether the points are normalized between -1 and 1 or not
+    """
+
+    # Plot the points onto the figure
     axes.scatter(
-        center[0],
-        center[1],
-        center[2],
-        s = 250,
-        c = 'red',
-        marker = 'x',
-        alpha = 1.0
+        points[0, :],
+        points[1, :],
+        s = int(size),
+        c = color,
+        alpha = alpha,
+        marker = marker,
+        edgecolors = edgecolor
     )
 
-    # Plot the axes at the center point
-    axes.quiver(
-        *center,
-        axes_in[0, 0],
-        axes_in[0, 1],
-        axes_in[0, 2],
+    # Name the axes and title
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
+
+    if is_normalized_neg:
+        axes.set_xlim(-1, 1)
+        axes.set_ylim(-1, 1)
+
+
+def plotAxes3D(figure_axes, origin, coordinate_axes, is_normalized = True):
+    """
+    Plot the given axes at the origin point in 3D
+
+    Input:
+        figure_axes: The figure axes to plot onto
+        origin: A 3D point that is the origin of the axes
+        coordinate_axes: A set of 3 axes vectors to plot
+        is_normalized: Whether the sizes of the vectors are normalized between 0 and
+        1 or not
+    """
+
+    # Plot the axes at the given origin point
+    # The first axes is red
+    figure_axes.quiver(
+        *origin,
+        coordinate_axes[0, 0],
+        coordinate_axes[0, 1],
+        coordinate_axes[0, 2],
         color = 'r'
     )
+    # The second axes is green
+    figure_axes.quiver(
+        *origin,
+        coordinate_axes[1, 0],
+        coordinate_axes[1, 1],
+        coordinate_axes[1, 2],
+        color = 'g'
+    )
+    # The third axes is blue
+    figure_axes.quiver(
+        *origin,
+        coordinate_axes[2, 0],
+        coordinate_axes[2, 1],
+        coordinate_axes[2, 2],
+        color = 'b'
+    )
 
-    axes.quiver(
-        *center,
-        axes_in[1, 0],
-        axes_in[1, 1],
-        axes_in[1, 2],
+    # Name the axes
+    figure_axes.set_xlabel("X-Axis")
+    figure_axes.set_ylabel("Y-Axis")
+    figure_axes.set_zlabel("Z-Axis")
+
+    # If we know that the points are normalized we can set the axes limits directly
+    if is_normalized:
+        figure_axes.set_xlim(0, 1)
+        figure_axes.set_ylim(0, 1)
+        figure_axes.set_zlim(0, 1)
+
+
+def plotAxes2D(figure_axes, origin, coordinate_axes, is_normalized_neg = True):
+    """
+    Plot the given axes at the origin point in 2D
+
+    Input:
+        figure_axes: The figure axes to plot onto
+        origin: A 2D point that is the origin of the axes
+        coordinate_axes: A set of 2 axes vectors to plot
+        is_normalized_neg: Whether the sizes of the vectors are normalized between -1 and
+        1 or not
+    """
+
+    # Plot the axes at the given origin point
+    # The first axes is red
+    figure_axes.quiver(
+        *origin,
+        coordinate_axes[0, 0],
+        coordinate_axes[0, 1],
+        color = 'r'
+    )
+    # The second axes is green
+    figure_axes.quiver(
+        *origin,
+        coordinate_axes[1, 0],
+        coordinate_axes[1, 1],
         color = 'g'
     )
 
-    axes.quiver(
-        *center,
-        axes_in[2, 0],
-        axes_in[2, 1],
-        axes_in[2, 2],
-        color = 'b'
-    )
-
     # Name the axes and title
-    axes.set_xlabel("X-Axis")
-    axes.set_ylabel("Y-Axis")
-    axes.set_zlabel("Z-Axis")
-    axes.set_xlim(0, 1)
-    axes.set_ylim(0, 1)
-    axes.set_zlim(0, 1)
-    plt.title("Plot of points and the 3 axes vectors")
+    figure_axes.set_xlabel("X-Axis")
+    figure_axes.set_ylabel("Y-Axis")
 
-    plt.show()
+    # If we know that the points are normalized we can set the axes limits directly
+    if is_normalized_neg:
+        figure_axes.set_xlim(-1, 1)
+        figure_axes.set_ylim(-1, 1)
 
 
-def plotPointsAndAxes2D(points, center, axes_in):
+def plotVector2D(axes, origin, vector, color = "green", is_normalized = True):
     """
-    Plot the given points, the center of the generated ellipse and its eigenvectors
+    Plot the given 2D vectors at the given origin onto the given figure
+    axes.
 
     Input:
-        points: A 2D point could of points to plot
-        center: A 2D point that is the center of the ellipsoid
-        points: A set of 2 axes vectors that are the eigenvectors of the ellipsoid
+        axes: The figure axes to plot onto
+        origin: A 3D point cloud of origins for the vectors
+        vector: A list of 3D vectors to plot
+        color: The color to plot the vectors with
+        is_normalized: Whether the sizes of the vectors are normalized between 0 and
+                       1 or not
     """
-
-    # Prepare the figure
-    figure, axes = plt.subplots(figsize = plt.figaspect(1))
-
-    # Plot the points onto the figure
-    axes.scatter(
-        points[0, :],
-        points[1, :],
-        s = 10,
-        c = 'blue',
-        alpha = 0.6
-    )
-
-    # Plot the center point to be destinct from the other points
-    axes.scatter(
-        center[0],
-        center[1],
-        s = 250,
-        c = 'red',
-        marker = 'x',
-        alpha = 1.0
-    )
-
-    # Plot the axes at the center point
-    axes.quiver(
-        *center,
-        axes_in[0, 0],
-        axes_in[0, 1],
-        color = 'r'
-    )
-
-    axes.quiver(
-        *center,
-        axes_in[1, 0],
-        axes_in[1, 1],
-        color = 'b'
-    )
-
-    # Name the axes and title
-    axes.set_xlabel("X-Axis")
-    axes.set_ylabel("Y-Axis")
-    axes.set_xlim(-1, 1)
-    axes.set_ylim(-1, 1)
-    plt.title("Plot of points and the 2 axes vectors")
-
-    plt.show()
-
-
-def plotPointsAndVectors(points, center, vectors, mean_vector):
-    """
-    Plot the given points, the center of the generated ellipsoid and its eigenvectors
-
-    Input:
-
-    """
-
-    # Prepare the figure
-    figure = plt.figure(figsize = plt.figaspect(1))
-    axes = figure.add_subplot(projection = '3d')
-
-    # Plot the points onto the figure
-    axes.scatter(
-        points[0, :],
-        points[1, :],
-        points[2, :],
-        s = 10,
-        c = 'blue',
-        alpha = 0.6
-    )
 
     # Plot the vectors
     axes.quiver(
-        points[0, ::100],
-        points[1, ::100],
-        points[2, ::100],
-        vectors[0, ::100],
-        vectors[1, ::100],
-        vectors[2, ::100],
-        color = 'g'
+        origin[0],
+        origin[1],
+        vector[0],
+        vector[1],
+        color = color
     )
 
-    # Plot the center point to be destinct from the other points
-    axes.scatter(
-        center[0],
-        center[1],
-        center[2],
-        s = 250,
-        c = 'r',
-        alpha = 1.0
-    )
+    # Name the axes and title
+    axes.set_xlabel("X-Axis")
+    axes.set_ylabel("Y-Axis")
 
-    # Plot the mean vector at the center
+    # If we know that the vectors are in normalized range we can set the axes limits
+    # directly
+    if is_normalized:
+        axes.set_xlim(0, 1)
+        axes.set_ylim(0, 1)
+
+
+def plotVector3D(axes, origin, vector, color = "green", is_normalized = True):
+    """
+    Plot the given 3D vector at the given origin onto the given figure axes.
+
+    Input:
+        axes: The figure axes to plot onto
+        origin: A 3D point that is the origin of the vector
+        vector: A 3D vector to plot
+        color: The color to plot the vector as
+        is_normalized: Whether the sizes of the vectors are normalized between 0 and
+                       1 or not
+    """
+
+    # Convert to the shape that the plotVectors3D function expects
+    origins = np.zeros((3, 1))
+    origins[0, :] = origin[0]
+    origins[1, :] = origin[1]
+    origins[2, :] = origin[2]
+
+    vectors = np.zeros((3, 1))
+    vectors[0, :] = vector[0]
+    vectors[1, :] = vector[1]
+    vectors[2, :] = vector[2]
+
+    # Plot the vector using the general function
+    plotVectors3D(axes, origins, vectors, color, 1, is_normalized)
+
+
+def plotVectors3D(axes, origins, vectors, color = "green", every_nth = 100,
+                  is_normalized = True):
+    """
+    Plot the given 3D vectors ar their respective given origin onto the given figure
+    axes. If there are too many vectors to plot, only every nth element can be plotted.
+
+    Input:
+        axes: The figure axes to plot onto
+        origins: A 3D point cloud of origins for the vectors
+        vectors: A list of 3D vectors to plot
+        color: The color to plot the vectors with
+        every_nth: Plot only every nth vector to reduce clutter
+        is_normalized: Whether the sizes of the vectors are normalized between 0 and
+                       1 or not
+    """
+
+    # Plot the vectors
     axes.quiver(
-        *center,
-        mean_vector[0],
-        mean_vector[1],
-        mean_vector[2],
-        color = 'r'
+        origins[0, ::int(every_nth)],
+        origins[1, ::int(every_nth)],
+        origins[2, ::int(every_nth)],
+        vectors[0, ::int(every_nth)],
+        vectors[1, ::int(every_nth)],
+        vectors[2, ::int(every_nth)],
+        color = color
     )
 
     # Name the axes and title
     axes.set_xlabel("X-Axis")
     axes.set_ylabel("Y-Axis")
     axes.set_zlabel("Z-Axis")
-    axes.set_xlim(0, 1)
-    axes.set_ylim(0, 1)
-    axes.set_zlim(0, 1)
-    plt.title("Plot of points and vectors with mean vector at the center")
 
-    plt.show()
+    # If we know that the vectors are in normalized range we can set the axes limits
+    # directly
+    if is_normalized:
+        axes.set_xlim(0, 1)
+        axes.set_ylim(0, 1)
+        axes.set_zlim(0, 1)
 
 
-def plotPointsAndEllipsoid(points, center, ellipsoid_axes, ellipsoid_axes_lengths,
-                           rotation_matrix):
+def plotEllipsoid(axes, center, axes_lengths, rotation_matrix, is_normalized = True):
     """
-    Plot the given points with the ellipsoid that encases them
+    Plot the ellipsoid with the given parameters
 
     Input:
-        points: A 3D point could of points to plot
-        center: The center point of the point cloud
-        ellipsoid_axes: The axes directions of the ellipsoid to plot
-        ellipsoid_axes_lengths: The axes lengths of the ellipsoid to plot
-        rotation_matrix: The rotation of the ellipsoid
+        axes: The figure axes to plot onto
+        center: The center point in 3D 
+        axes_lengths: The axes lengths of the ellipsoid, semi-major axis first,
+                      semi-minor axis last
+        rotation_matrix: The rotation matrix for the whole ellipsoid
     """
 
-    # Prepare the figure
-    figure = plt.figure(figsize = plt.figaspect(1))
-    axes = figure.add_subplot(projection = '3d')
+    # Create a set of all spherical angles
+    theta_theta = np.linspace(0, 2*np.pi, 100)
+    phi_phi = np.linspace(0, np.pi, 100)
 
-    # Plot the points
-    axes.scatter(
-        points[0, :],
-        points[1, :],
-        points[2, :],
-        s = 10,
-        c = 'blue',
-        alpha = 0.6
-    )
-
-    # Plot the center point to be destinct from the other points
-    axes.scatter(
-        center[0],
-        center[1],
-        center[2],
-        s = 250,
-        c = 'red',
-        marker = 'x',
-        alpha = 1.0
-    )
-
-    # Set of all spherical angles:
-    u = np.linspace(0, 2 * np.pi, 100)
-    v = np.linspace(0, np.pi, 100)
-
-    # TODO: What if we take a unit circle and use the ellipsoid matrix to transform it?
-    # Will it create our ellipsoid?
-
-    # Cartesian coordinates that correspond to the spherical angles on the ellipsoid:
-    # This is the equation of an ellipsoid, from:
+    # Cartesian coordinates that correspond to the spherical angles on the standard 
+    # ellipsoid. Following the equation of an ellipsoid, from:
     # https://stackoverflow.com/questions/7819498/plotting-ellipsoid-with-matplotlib)
     # and https://en.wikipedia.org/wiki/Ellipsoid
-    x = ellipsoid_axes_lengths[0] * np.outer(np.sin(v), np.cos(u))
-    y = ellipsoid_axes_lengths[1] * np.outer(np.sin(v), np.sin(u))
-    z = ellipsoid_axes_lengths[2] * np.outer(np.cos(v), np.ones_like(u))
+    xx = axes_lengths[0] * np.outer(np.sin(phi_phi), np.cos(theta_theta))
+    yy = axes_lengths[1] * np.outer(np.sin(phi_phi), np.sin(theta_theta))
+    zz = axes_lengths[2] * np.outer(np.cos(phi_phi), np.ones_like(theta_theta))
 
-    # Apply the rotation of the ellipsoid
-    for i in range(x.shape[0]):
-        for j in range(x.shape[1]):
-            v = np.array([x[i][j], y[i][j], z[i][j]])
+    # Since we have a standard ellipsoid we need to transform it to have the parameters
+    # that were given. First apply the rotation
+    for i in range(xx.shape[0]):
+        for j in range(xx.shape[1]):
+            v = np.array([xx[i][j], yy[i][j], zz[i][j]])
             new_v = rotation_matrix @ v
 
-            x[i][j] = new_v[0]
-            y[i][j] = new_v[1]
-            z[i][j] = new_v[2]      
+            xx[i][j] = new_v[0]
+            yy[i][j] = new_v[1]
+            zz[i][j] = new_v[2]      
 
-    # Translate the ellipsoid
-    for i in range(x.shape[0]):
-        for j in range(x.shape[1]):
-            v = np.array([x[i][j], y[i][j], z[i][j]])
+    # Then translate it to the center point
+    for i in range(xx.shape[0]):
+        for j in range(xx.shape[1]):
+            v = np.array([xx[i][j], yy[i][j], zz[i][j]])
             new_v = v + center
 
-            x[i][j] = new_v[0]
-            y[i][j] = new_v[1]
-            z[i][j] = new_v[2]  
+            xx[i][j] = new_v[0]
+            yy[i][j] = new_v[1]
+            zz[i][j] = new_v[2]  
 
     # Plot the ellipsoid
-    axes.scatter(center[0], center[1], center[2], s = 100, c = 'red')
-    axes.plot_surface(x, y, z, rstride = 4, cstride = 4, color = 'g', alpha = 0.3)
+    axes.plot_surface(xx, yy, zz, rstride = 4, cstride = 4, color = 'g', alpha = 0.3)
 
     # Name the axes and title
     axes.set_xlabel("X-Axis")
     axes.set_ylabel("Y-Axis")
     axes.set_zlabel("Z-Axis")
-    axes.set_xlim(0, 1)
-    axes.set_ylim(0, 1)
-    axes.set_zlim(0, 1)
-    axes.set_title("Plot of points and the ellipsoid that encases them")
 
-    plt.show()
+    # Normalize the axes if we know the ellipsoid is within normalized range
+    if is_normalized:
+        axes.set_xlim(0, 1)
+        axes.set_ylim(0, 1)
+        axes.set_zlim(0, 1)
 
 
-def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
-                        rotation_matrix):
+def plotEllipse(axes, center, axes_lengths, rotation_matrix, is_normalized_neg = True):
     """
-    Plot the given points with the ellipsoid that encases them
+    Plot the given ellipse with the given parameters
 
     Input:
-        points: A 3D point could of points to plot
-        center: The center point of the point cloud
-        ellipsoid_axes: The axes directions of the ellipsoid to plot
-        ellipsoid_axes_lengths: The axes lengths of the ellipsoid to plot
-        rotation_matrix: The rotation of the ellipsoid
+        axes: The figure axes to plot onto
+        center: The center point in 2D 
+        axes_lengths: The axes lengths of the ellipse, semi-major axis first, semi-minor
+                      axis last
+        rotation_matrix: The rotation matrix for the whole ellipse
     """
 
-    # Prepare the figure
-    figure, axes = plt.subplots(figsize = plt.figaspect(1))
+    # Set of all polar angles:
+    rr = np.linspace(0, 2*np.pi, 100)
 
-    # Plot the points
-    axes.scatter(
-        points[0, :],
-        points[1, :],
-        s = 10,
-        c = 'blue',
-        alpha = 0.6
-    )
-
-    # Plot the center point to be destinct from the other points
-    axes.scatter(
-        center[0],
-        center[1],
-        s = 250,
-        c = 'red',
-        marker = 'x',
-        alpha = 1.0
-    )
-
-    # Set of all radial angles:
-    rr = np.linspace(0, 2 * np.pi, 100)
-
-    # Cartesian coordinates that correspond to the radial angles on the ellipse:
-    # This is the equation of an ellipse, from:
+    # Cartesian coordinates that correspond to the polar angles on the ellipse:
+    # This is the equation of a standard ellipse, from:
     # https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot
     # and https://en.wikipedia.org/wiki/Ellipse
-    xx = ellipse_axes_lengths[0]*np.cos(rr)
-    yy = ellipse_axes_lengths[1]*np.sin(rr)
+    xx = axes_lengths[0]*np.cos(rr)
+    yy = axes_lengths[1]*np.sin(rr)
 
-    # Apply the rotation of the ellipsoid
+    # The ellipse is now in standard form, we need to transform it in order the have the
+    # given parameters. First apply the rotation
     for i in range(xx.shape[0]):
         v = np.array([xx[i], yy[i]])
         new_v = rotation_matrix @ v
@@ -385,7 +428,7 @@ def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
         xx[i] = new_v[0]
         yy[i] = new_v[1]
 
-    # Translate the ellipse
+    # Then translate
     for i in range(xx.shape[0]):
         v = np.array([xx[i], yy[i]])
         new_v = v + center
@@ -399,146 +442,48 @@ def plotPointsAndEllipse(points, center, ellipse_axes, ellipse_axes_lengths,
     # Name the axes and title
     axes.set_xlabel("X-Axis")
     axes.set_ylabel("Y-Axis")
-    axes.set_xlim(-1, 1)
-    axes.set_ylim(-1, 1)
-    axes.set_title("Plot of points and the ellipse that encases them")
 
-    plt.show()
+    # Normalize the axes if we know the ellipse is within normalized range
+    if is_normalized_neg:
+        axes.set_xlim(-1, 1)
+        axes.set_ylim(-1, 1)
 
 
-def plotPointsCompAndPlane(points_1, points_2, normal, center):
+def plotPlane(axes, point, normal):
     """
-    Plot both sets of given points in different style to be able to compare them. Also
-    plot the plane that one set of points should be located on.
+    Plot a plane defined by the given point and normal vector. The plane is assumed to be
+    within normalized range [0, 1]
 
     Input:
-        points_1: The first 3D point cloud of points to plot
-        points_2: The second 3D point cloud to plot
-        normal: The normal of the plane that the second point cloud should be located on
-        center: The center point of the plane
+        axes: The figure axes to plot onto
+        point: A 3D point on the plane
+        normal: The normal vector of the plane
     """
-
-    # Prepare the figure
-    figure = plt.figure(figsize = plt.figaspect(1))
-    axes = figure.add_subplot(projection = '3d')
-
-    # Plot the first set of points onto the figure
-    axes.scatter(points_1[0, :], points_1[1, :], points_1[2, :], c = 'blue')
-
-    # Plot the second set of points onto the figure
-    axes.scatter(points_2[0, :], points_2[1, :], points_2[2, :], c = 'red')
 
     # Prepare the plane, from:
     # https://stackoverflow.com/questions/3461869/plot-a-plane-based-on-a-normal-vector-and-a-point-in-matlab-or-matplotlib
     # The plane formula is a*x + b*y + c*z + d = 0
-    # The normal is [a, b, c], we need to calculate d
+    # The normal is (a, b, c), we need to calculate d
     a = normal[0]
     b = normal[1]
     c = normal[2]
-    d = -(a * center[0] + b * center[1] + c * center[2])
+    d = -(a * point[0] + b * point[1] + c * point[2])
 
     # Set of all x and y values for the plane
     xx, yy = np.meshgrid(np.linspace(0.0, 1.0, 100), np.linspace(0.0, 1.0, 100))
 
-    # Calculate corresponding z-value for each xx and yy
-    zz = center[2] - (a * (xx - center[0]) + b * (yy - center[1])) / c
+    # Calculate the corresponding z-value for each xx and yy
+    zz = point[2] - (a * (xx - point[0]) + b * (yy - point[1])) / c
 
     # plot the plane
-    #axes.plot_surface(xx, yy, zz)
-
-    # Plot the normal vector at the center point
-    axes.quiver(
-        center[0],
-        center[1],
-        center[2],
-        normal[0],
-        normal[1],
-        normal[2],
-        color = 'red',
-        length = 0.2
-    )
+    axes.plot_surface(xx, yy, zz)
 
     # Name the axes and title
     axes.set_xlabel("X-Axis")
     axes.set_ylabel("Y-Axis")
     axes.set_zlabel("Z-Axis")
+
+    # Normalize the axes if we know the plane is within normalized range
     axes.set_xlim(0, 1)
     axes.set_ylim(0, 1)
     axes.set_zlim(0, 1)
-    plt.title("Two sets of points and the plane that the red points should be on")
-
-    plt.show()
-
-
-def plotEllipseSamples(samples, center, ellipse_axes_lengths, rotation_matrix):
-    """
-    Plot the given samples with the ellipse that they sample
-
-    Input:
-        samples: A 2D point could of points on the ellipse
-        center: The center point of the ellipse
-        ellipse_axes_lengths: The axes lengths of the ellipse to plot
-        rotation_matrix: The rotation of the ellipse
-    """
-
-    # Prepare the figure
-    figure, axes = plt.subplots(figsize = plt.figaspect(1))
-
-    # Plot the samples
-    axes.scatter(
-        samples[0, :],
-        samples[1, :],
-        s = 100,
-        linewidths = 3.0,
-        c = 'blue',
-        alpha = 0.2
-    )
-
-    # Plot the center point to be destinct from the other points
-    axes.scatter(
-        center[0],
-        center[1],
-        s = 250,
-        
-        c = 'red',
-        marker = 'x',
-        alpha = 1.0
-    )
-
-    # Set of all radial angles:
-    rr = np.linspace(0, 2 * np.pi, 100)
-
-    # Cartesian coordinates that correspond to the radial angles on the ellipse:
-    # This is the equation of an ellipse, from:
-    # https://stackoverflow.com/questions/10952060/plot-ellipse-with-matplotlib-pyplot
-    # and https://en.wikipedia.org/wiki/Ellipse
-    xx = ellipse_axes_lengths[0]*np.cos(rr)
-    yy = ellipse_axes_lengths[1]*np.sin(rr)
-
-    # Apply the rotation of the ellipse
-    for i in range(xx.shape[0]):
-        v = np.array([xx[i], yy[i]])
-        new_v = rotation_matrix @ v
-
-        xx[i] = new_v[0]
-        yy[i] = new_v[1]
-
-    # Translate the ellipse
-    for i in range(xx.shape[0]):
-        v = np.array([xx[i], yy[i]])
-        new_v = v + center
-
-        xx[i] = new_v[0]
-        yy[i] = new_v[1]
-
-    # Plot the ellipse
-    plt.plot(xx, yy, color = 'g')
-
-    # Name the axes and title
-    axes.set_xlabel("X-Axis")
-    axes.set_ylabel("Y-Axis")
-    axes.set_xlim(-2, 2)
-    axes.set_ylim(-2, 2)
-    axes.set_title("Plot of samples along an ellipse")
-
-    plt.show()                       

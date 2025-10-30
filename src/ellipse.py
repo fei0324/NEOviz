@@ -19,15 +19,34 @@ from src.ext.mvee import mvee2
 import src.util as util
 import src.plotting as plotting
 
+EPSILON = 1e-4
 
-# Data type to hold information about a 3D ellipsoid
+# Data types to hold information
+# An ellipsoid data object from MVEE and other parameters
 @dataclass
 class Ellipsoid:
     ellipsoid_matrix: list
     center: list
     axes: list
     axes_lengths: list
-    rotation_matrix: list 
+    rotation_matrix: list
+
+# An data object for each sample that will be written in the tube file
+@dataclass
+class EllipseSamplePoint:
+    position_2D: list
+    position_3D: list
+    texture_coordinate: list
+    density: float
+
+# Data object for the full ellipse that will be written in the tube file
+@dataclass
+class TubeEllipse:
+    time: str
+    center: list
+    textures: list
+    samples: list
+    ellipsoid: Ellipsoid
 
 
 def calcMveeEllipsoid(points):
@@ -147,16 +166,28 @@ def createEllipsoid(points, do_plotting, is_3d = True):
 
             # Plot the original points and the ellipsoid axes. Red should be the largest
             # axis and blue should be the smallest axis
-            plotting.plotPointsAndAxes(points, center, axes)
+            figure = plt.figure(figsize = plt.figaspect(1))
+            figure_axes = figure.add_subplot(projection = '3d')
+            plotting.plotPoints3D(figure_axes, points, alpha = 0.6)
+            plotting.plotPoint3D(figure_axes, center, 250, "red", 1.0, 'x')
+            plotting.plotAxes3D(figure_axes, center, axes)
+            plt.title("Plot of ellipsoid points and the 3 axes")
+            plt.show()
 
             # Plot the original points and the ellipsoid as a transparent 3D shape
-            plotting.plotPointsAndEllipsoid(
-                points,
+            figure.clear()
+            figure = plt.figure(figsize = plt.figaspect(1))
+            figure_axes = figure.add_subplot(projection = '3d')
+            plotting.plotPoints3D(figure_axes, points, alpha = 0.6)
+            plotting.plotPoint3D(figure_axes, center, 250, "red", 1.0, 'x')
+            plotting.plotEllipsoid(
+                figure_axes,
                 center,
-                axes,
                 axes_lengths,
                 rotation_matrix
             )
+            plt.title("Plot of the ellipsoid and the points it encases")
+            plt.show()
         else:
             print("2D ellipse axes", axes)
             print("2D ellipse axes lengths", axes_lengths)
@@ -164,16 +195,26 @@ def createEllipsoid(points, do_plotting, is_3d = True):
 
             # Plot the points and the ellipse axes in 2D. Red should be the largest axis
             # and blue should be the smallest axis
-            plotting.plotPointsAndAxes2D(points, center, axes)
+            figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+            plotting.plotPoints2D(figure_axes, points, alpha = 0.6)
+            plotting.plotPoint2D(figure_axes, center, 250, "red", 1.0, 'x')
+            plotting.plotAxes2D(figure_axes, center, axes)
+            plt.title("Plot of ellipse points and the 2 axes")
+            plt.show()
 
             # Plot the original points and the ellipse in 2D
-            plotting.plotPointsAndEllipse(
-                points,
+            figure.clear()
+            figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+            plotting.plotPoints2D(figure_axes, points, alpha = 0.6)
+            plotting.plotPoint2D(figure_axes, center, 250, "red", 1.0, 'x')
+            plotting.plotEllipse(
+                figure_axes,
                 center,
-                axes,
                 axes_lengths,
                 rotation_matrix
             )
+            plt.title("Plot of the ellipse and the points it encases")
+            plt.show()
 
     return Ellipsoid(
         ellipsoid_matrix,
@@ -234,12 +275,21 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
 
     # Plot the original points and the new points to compare
     if do_plotting:
-        plotting.plotPointsCompAndPlane(
-            coordinates,
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, coordinates)
+        plotting.plotPoints3D(
+            figure_axes,
             plane_variant_intersections,
-            mean_velocity,
-            ellipsoid_center
+            color = "red"
         )
+        plotting.plotPlane(figure_axes, ellipsoid_center, mean_velocity)
+        plotting.plotVector3D(figure_axes, ellipsoid_center, mean_velocity, "red",)
+        plt.title(
+            "Plot of original points and the projections on the mean velocity plane"
+        )
+        plt.show()
+
 
     # Transform the points on this 3D plane to the 2D XY plane to convert this to a
     # 2D problem
@@ -252,81 +302,24 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
 
     # Plot the points in 2D
     if do_plotting:
-        plotting.plotPoints2D(transformed_intersections_2d)
+        figure, axes = plt.subplots(figsize = plt.figaspect(1))
+        plotting.plotPoints2D(
+            axes,
+            transformed_intersections_2d
+        )
+        plt.title("Plot of transformed points on the XY plane")
+        plt.show()
 
     # Return the transformed points
     return transformed_intersections_2d, time_lags
 
 
-def findStartingPoint(ssb_normal, center_3D, mean_velocity):
-    """
-    Find the starting point on the ellipse where the given vector intersects the ellipse.
-    The vector should be given in 2D space.
-    Input:
-        ssb_normal: The vector to find the intersection point with the ellipse
-        center: The center of the ellipse
-        axes: The normalized axes of the ellipse
-        axes_lengths: The lengths of the axes of the ellipse
-    Output:
-        intersection_point: The intersection point on the ellipse
-    """
-
-    # Normalize the SSB vector
-    ssb_vector = ssb_normal / np.linalg.norm(ssb_normal)
-
-    # Project this 3D vector onto the 3D plane of the mean velocity
-    # TODO: Debug the projection function to make sure it creates a vector that is on the plane
-    ssb_vector_on_plane = util.projectVectorToPlane(ssb_vector, mean_velocity)
-
-    # Transform this 3D vector on the mean velocity plane to the XY plane (2D)
-    # TODO: Debug this. The assetion for being on the XY plane fails
-    ssb_vector_2d = util.transformPointsToXYPlane(
-        np.array([ssb_vector_on_plane]).T,
-        center_3D,
-        mean_velocity,
-        False
-    )
-
-    # Find the starting point on the 2D ellipse. I.e where this vector meets the ellipse.
-    # This needs to consistently chosse the intersection point in the positive direction
-    # of the SSB vector.
-
-
-def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_normal,
-                  center_3D, mean_velocity, do_plotting, precision = 1000):
-    """
-    Sample the 2D ellipse on the 3D mean velocity plane in a consistent manner so that
-    the points are always in the same order. The sampling should start from the
-    intersection point of the projected SSB vector onto the plane and then go clockwise
-    around the ellipse with each sample being equal arc distance between each other.
-
-    Input:
-        num_samples: The number of samples to take on the ellipse
-        center_2D: The center of the ellipse in 2D space
-        axes_lengths: The lengths of the axes of the ellipse in 2D
-        rotation_matrix: The rotation matrix of the ellipse in 2D
-        ssb_normal: The SSB vector in 3D world space
-        center: The center of the ellipsoid in 3D world space (should be very similar to
-                center_2D in 3D world space)
-        mean_velocity: The normal vector of the mean velocity plane
-        do_plotting: Whether or not to do debug plotting
-        precision: The precision to use when calculating the circumference of the 
-                   ellipse. Higher values give better precision (default is 1000).
-
-    Output:
-        sampled_points_3D: The sampled points in order on the 2D ellipse in 3D world space
-        meta_data: Meta data about the sampled points
-    """
-
-    # 1. Sample the ellipse in 2D starting from the top of the Y axis on the standard
-    # ellipse and going clockwise with equal arc distance between each points
-    
+def calcEllipseCircumference(axes_lengths, precision):
     # To simplify the formulas we define a and b
     a = axes_lengths[0]
     b = axes_lengths[1]
-
-    # Calculate the total circumference of the ellipse to then divide it into points with
-    # equal arc distance between each point
+    
+    # Calculate the total circumference of the ellipse using numerical integration
     circumference = 4.0*a
 
     # Need to compute the integral numerically, therefore we divide the circumfrance into
@@ -341,13 +334,23 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
     # https://math.stackexchange.com/questions/172766/calculating-equidistant-points-around-an-ellipse-arc
     Ee = 0.0
     for theta in theta_theta:
-        Ee += np.sqrt(1 - np.sin(theta)**2 * (1 - b**2/a**2)) * d_theta
-    circumference *= Ee
+        Ee += np.emath.sqrt(1 - np.sin(theta)**2 * (1 - b**2/a**2)) * d_theta
 
+    return circumference * Ee
+
+
+def sampleEqualArcLength(num_samples, axes_lengths, circumference, precision):
+    # Sample the ellipse in 2D starting from the top of the Y axis on the standard
+    # ellipse and going clockwise with equal arc distance between each points
+    # To simplify the formulas we define a and b
+    a = axes_lengths[0]
+    b = axes_lengths[1]
+    
     # To sample the ellipse we need to walk along the full ellipse and not just a quarter
     # of it but lets keep the precision the same as before. i.e. 4 times the previous
     # precision to keep the same step size
     theta_theta = np.linspace(0, 2.0*np.pi, 4*precision)
+    d_theta = np.pi/(2.0 * precision)
     
     # The formula for where to put a sample is: iC/n = a * Em(phi) where i is the sample
     # index [0, n[, C is the total circumference, and n is the total number of
@@ -360,14 +363,14 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
 
     # Start at i = 0 (phi = 0) and accumulate the Em until we reach the desired Em and
     # save a sample point. Next increment the target Em and repeat until we have all
-    # samples. Make sure we do not go outside the bounds of the ellipse
-    # TODO: Store the x and y in one 2D array instead of two separate ones
+    # samples. Make sure we do not go outside the bounds of the ellipse.
+    # TODO: Store the x and y together instead of in seperate lists
     sampled_points_x = []
     sampled_points_y = []
     Em_accumulated = 0.0
     i = 0
     for theta in theta_theta:
-        Em_accumulated += np.sqrt(1 - np.sin(theta)**2 * (1 - b**2/a**2)) * d_theta
+        Em_accumulated += np.emath.sqrt(1 - np.sin(theta)**2 * (1 - b**2/a**2)) * d_theta
 
         # Stop if we have reached the maximum Em
         if (Em_accumulated > max_Em):
@@ -389,11 +392,125 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
             if (i >= num_samples):
                 break
     
+    return np.array([sampled_points_x, sampled_points_y])
+
+
+def findStartingPoint(ssb_normal, center_3D, mean_velocity, center_2D, 
+                      ellipse_samples_2D, do_plotting = False):
+    """
+    Find the index to one of the sample points on the ellipse that is closest to the
+    intersection point of the SSB vector projected ontot he 2D ellipse. This is the index
+    to the sample point that should go first in the list of samples.
+
+    Input:
+        ssb_normal: The SSB vector in 3D world space
+        center_3D: The center of the ellipsoid in 3D world space
+        mean_velocity: The normal vector of the mean velocity plane
+        center_2D: The center of the ellipse in 2D space
+        ellipse_samples_2D: The sampled points along the ellipse in 2D space
+                            (non-standard ellipse)
+        do_plotting: Whether or not to do debug plotting
+    Output:
+        intersection_index: The index of the sample point that should be first in the
+                            list of samples of the ellipse
+    """
+
+    # Normalize the vectors
+    ssb_normal = ssb_normal / np.linalg.norm(ssb_normal)
+    mean_velocity = mean_velocity / np.linalg.norm(mean_velocity)
+    
+    # Project the ssb 3D vector onto the 3D plane of the mean velocity
+    ssb_on_plane = util.projectVectorToPlane(ssb_normal, mean_velocity)
+
+    # Transform the projected 3D ssb vector on the mean velocity plane, to the XY plane
+    ssb_vector_2d = util.transformPointsToXYPlane(
+        np.array([ssb_on_plane]).T,
+        center_3D,
+        mean_velocity,
+        False
+    )
+
+    # Plot the 2D projection of the ssb vector
+    if do_plotting:
+        figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+        plotting.plotPoint2D(figure_axes, center_2D, 250, "red", 1.0, 'x')
+        plotting.plotVector2D(figure_axes, center_2D, ssb_vector_2d, color = "red")
+        plotting.plotPoints2D(figure_axes, ellipse_samples_2D)
+        plt.title("Projection of SSB vector onto the mean velocity plane")
+        plt.show()
+
+    # Get the smallest angle from the transformed ssb vector to one of the ellipse sample
+    # points
+    intersection_index = -1
+    min_angle = np.inf
+    for point in range(ellipse_samples_2D.shape[1]):
+        sample = ellipse_samples_2D[:, point]
+        ssb_normalized = ssb_vector_2d / np.linalg.norm(ssb_vector_2d)
+        sample_normalized = sample / np.linalg.norm(sample)
+        angle = np.arccos(np.dot(ssb_normalized.reshape(-1), sample_normalized))
+
+        # Check if this is the new smallest angle
+        if angle < min_angle:
+            min_angle = angle
+            intersection_index = point
+
+    # Did we find any intersection point
+    assert intersection_index != -1, "Could not find starting point on ellipse"
+    intersection_point = ellipse_samples_2D[:, intersection_index]
+
+    # Plot the intersection point in the ellipse
+    if do_plotting:
+        figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+        plotting.plotPoint2D(figure_axes, intersection_point, 250, "green")
+        plotting.plotVector2D(figure_axes, center_2D, ssb_vector_2d, color = "red")
+        plotting.plotPoints2D(figure_axes, ellipse_samples_2D)
+        plt.title("Intersection point on the sampled ellipse")
+        plt.show()
+
+    return intersection_index
+    
+
+def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_normal,
+                  center_3D, mean_velocity, do_plotting, precision = 1000):
+    """
+    Sample the 2D ellipse on the 3D mean velocity plane in a consistent manner so that
+    the points are always in the same order. The sampling should start from the
+    intersection point of the projected SSB vector onto the plane and then go clockwise
+    around the ellipse with each sample being equal arc distance between each other.
+
+    Input:
+        num_samples: The number of samples to take on the ellipse
+        center_2D: The center of the ellipse in 2D space
+        axes_lengths: The lengths of the axes of the ellipse in 2D
+        rotation_matrix: The rotation matrix of the ellipse in 2D
+        ssb_normal: The SSB vector in 3D world space
+        center: The center of the ellipsoid in 3D world space (should be very similar to
+                center_2D in 3D world space)
+        mean_velocity: The normal vector of the mean velocity plane
+        do_plotting: Whether or not to do debug plotting
+        precision: The precision to use when calculating the circumference of the 
+                   ellipse. Higher values give better precision (default is 1000).
+    Output:
+        sampled_points_3D: The sampled points in order on the 2D ellipse in 3D world space
+        meta_data: Meta data about the sampled points
+    """
+
+    # Calculate the total circumference of the ellipse to then divide it into points with
+    # equal arc distance between each point
+    circumference = calcEllipseCircumference(axes_lengths, precision)
+
+    # Sample the ellipse with equal arc distance between each point
+    sampled_points = sampleEqualArcLength(
+        num_samples,
+        axes_lengths,
+        circumference,
+        precision
+    )
+
     # The samples are now located with equal arc distance between them around a standard
     # ellipse at the origin. The semi-major axis is along the X axis and the semi-minor
     # axis along the Y axis. We need to rotate and translate these points to be in the
-    # correct position to select the starting point correctly
-    sampled_points = np.array([sampled_points_x, sampled_points_y])
+    # correct position so we can select the starting point consistently
     for point in range(sampled_points.shape[1]):
         # Rotate the point using the rotation matrix of the ellipse
         sampled_points[:, point] = rotation_matrix @ sampled_points[:, point]
@@ -403,31 +520,144 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
 
     # Plot the samples. The plotting code will translate and rotate the ellipse, but we
     # have to translate and rotate the points ourselves (which we have done above)
-    plotting.plotEllipseSamples(
-        sampled_points,
+    if do_plotting:
+        figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+        plotting.plotPoints2D(figure_axes, sampled_points, size = 50, alpha = 0.2)
+        plotting.plotPoint2D(figure_axes, center_2D, 250, "red", 1.0, 'x')
+        plotting.plotEllipse(
+            figure_axes,
+            center_2D,
+            axes_lengths,
+            rotation_matrix
+        )
+        plt.title("Sampled points along the ellipse")
+        plt.show()
+
+    # Find the starting point on the ellipse using the SSB vector
+    starting_point_index = findStartingPoint(
+        ssb_normal,
+        center_3D,
+        mean_velocity,
         center_2D,
-        axes_lengths, 
-        rotation_matrix
+        sampled_points,
+        do_plotting
     )
 
-    # 2. Find the starting point on the ellipse using the SSB vector and reorder the
-    # samples accordingly
+    # Reorder the samples so that the starting point is first in the list
+    # First copy the points from the starting point to the end of the old samples list to
+    # the start of the new list
+    reordered_sampled_points = np.zeros(sampled_points.shape)
+    new = 0
+    for old in range(starting_point_index, sampled_points.shape[1]):
+        reordered_sampled_points[:, new] = sampled_points[:, old]
+        new += 1
 
-    # 6. Compute meta data of the ellipse in 2D space
-    # 7. Inverse transform the sampled 2D points back to 3D space
-    # 8. Return the sampled 3D points and their meta data
+    # Next copy the points from the start of the old samples list to the starting point
+    # of the new samples list
+    for old in range(0, starting_point_index):
+        reordered_sampled_points[:, new] = sampled_points[:, old]
+        new += 1
+
+    # Plot the reordered samples, marking the first and last sample points
+    if do_plotting:
+        figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+        plotting.plotPoint2D(
+            figure_axes,
+            reordered_sampled_points[:, 0],
+            size = 80,
+            color = "red",
+            edgecolor = "black",
+            alpha = 0.6
+        )
+        plotting.plotPoint2D(
+            figure_axes,
+            reordered_sampled_points[:, reordered_sampled_points.shape[1] - 1],
+            size = 80,
+            color = "green",
+            edgecolor = "black",
+            alpha = 0.6
+        )
+        plotting.plotPoints2D(
+            figure_axes,
+            reordered_sampled_points,
+            size = 50,
+            alpha = 0.2
+        )
+        plotting.plotPoint2D(figure_axes, center_2D, 250, "red", 1.0, 'x')
+        plotting.plotEllipse(
+            figure_axes,
+            center_2D,
+            axes_lengths,
+            rotation_matrix
+        )
+        plt.title("Reordered sampled points along the ellipse. First sample is red and last is green")
+        plt.show()
+
+    # Return the ellipse samples points in their correct order in 2D space
+    return reordered_sampled_points
 
 
-    # Ellipse meta data:
-    # Texture coordinates
-    # Density
-    # Timelag
-    # etc.
+def calcMetaData(ellipse_samples, intersection_points):
+    """
+    Calculate some additional meta data for each sample point on the ellipse
 
-    return None
+    Input:
+        ellipse_samples: The sampled points along the ellipse in 2D space
+        intersection_points: The intersection points of the variants on the mean
+                             velocity plane in 2D space
+    Output:
+        texture_coordinates: The texture coordinates for each sample point
+        densities: The density value for each sample point
+    """
+
+    # Find the largest x and y value to set the texture coordinates between 0 and 1
+    max_x = np.max(ellipse_samples[0, :])
+    min_x = np.min(ellipse_samples[0, :])
+    max_y = np.max(ellipse_samples[1, :])
+    min_y = np.min(ellipse_samples[1, :])
+
+    # For the density calculation, we accumilate the distances from each sample point to
+    # all intersection points. The density is then the inverse of this accumilated
+    # distance and normalized over this ellipse.
+    min_accumilated_distance = np.inf
+    max_accumilated_distance = -np.inf
+
+    # Calculate the meta data for each sample point
+    texture_coordinates = np.zeros((2, ellipse_samples.shape[1]))
+    densities = []
+    for sample in range(ellipse_samples.shape[1]):
+        # Texture coordinate (the u and v are flipped in OpenSpace)
+        u = (ellipse_samples[1, sample] - min_y) / (max_y - min_y)
+        v = (ellipse_samples[0, sample] - min_x) / (max_x - min_x)
+        texture_coordinates[:, sample] = np.array([u, v])
+
+        # Density
+        accumilated_distance = 0.0
+        for point in range(intersection_points.shape[1]):
+            accumilated_distance += np.linalg.norm(
+                ellipse_samples[:, sample] - intersection_points[:, point]
+            )
+        densities.append(accumilated_distance)
+
+        # Update min and max values
+        if (accumilated_distance > max_accumilated_distance):
+            max_accumilated_distance = accumilated_distance
+        if (accumilated_distance < min_accumilated_distance):
+            min_accumilated_distance = accumilated_distance
+
+    # Loop over all samples again to normalize the density values and invert it to be
+    # larger distance is smaller density
+    for d in range(len(densities)):
+        # Normalize the density value between 0 and 1
+        densities[d] = (densities[d] - min_accumilated_distance) / (max_accumilated_distance - min_accumilated_distance)
+
+        # Invert the density value
+        densities[d] = 1.0 - densities[d]
+
+    return texture_coordinates, densities
 
 
-def createEllipse(data, time, ssb_normal, do_plotting):
+def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
     """
     Create just one ellipse in the tube
 
@@ -438,6 +668,7 @@ def createEllipse(data, time, ssb_normal, do_plotting):
         do_plotting: Whether or not to show plots during the calculations
     Output:
         ellipse: One ellipse data object for the given timestep
+        ellipsoid: One ellipsoid that encapsulated the 3D points for the given timestep
     """
 
     print("\nTime", data.time_data[time])
@@ -449,32 +680,50 @@ def createEllipse(data, time, ssb_normal, do_plotting):
 
     # Plot the points for this timestep
     if do_plotting:
-        plotting.plotPoints(coordinates)
+        figure = plt.figure(figsize = plt.figaspect(1))
+        axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(axes, coordinates, is_normalized = False)
+        plt.title("Plot of non-normalized coordinates")
+        plt.show()
 
     # Normalize the points to be between 0 and 1 for better numerical stability
-    normalized_coordinates, offset, scaling_factors = util.normalizePoints(coordinates)
+    normalized_coordinates, offsets, scaling_factors = util.normalizePoints(coordinates)
 
     # Plot the normalized points for this timestep
     if do_plotting:
-        plotting.plotPoints(normalized_coordinates)
+        figure = plt.figure(figsize = plt.figaspect(1))
+        axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(axes, normalized_coordinates)
+        plt.title("Plot of normalized coordinates")
+        plt.show()
 
     # Create an ellipsoid data objects with all of the ellipsoid features
     ellipsoid = createEllipsoid(normalized_coordinates, do_plotting, True)
 
     # Transform all points to be on the a plane that is perpendicular to the direction
     # towards the Sun. The mean velocity vector is used as the normal of this plane.
-    # TODO: Should I normalize the velocities too? Or does it matter? 
     velocities = data.variants_velocities[time].T
     mean_velocity = np.mean(velocities, axis = 1)
 
     # Plot the points and the axes of the ellipsoid
     if do_plotting:
-        plotting.plotPointsAndVectors(
-            normalized_coordinates,
+        figure = plt.figure(figsize = plt.figaspect(1))
+        axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(axes, normalized_coordinates)
+        plotting.plotPoint3D(axes, ellipsoid.center, 250, "red", 1.0, 'x')
+        plotting.plotVector3D(
+            axes,
             ellipsoid.center,
-            velocities,
-            mean_velocity
+            mean_velocity,
+            "red"
         )
+        plotting.plotVectors3D(
+            axes,
+            normalized_coordinates,
+            velocities
+        )
+        plt.title("Plot of the velocities and the mean velocity")
+        plt.show()
 
     # Transform all points to be on this plane, i.e. a slice of the tube going around the
     # Sun. Then transform this plane to be on the XY plane, giving a 2D problem
@@ -491,9 +740,8 @@ def createEllipse(data, time, ssb_normal, do_plotting):
     ellipse = createEllipsoid(intersections_2d, do_plotting, False)
 
     # Sample the ellipse to create the polygon that make up the tube
-    num_samples = 80
-    samples = sampleEllipse(
-        num_samples,
+    samples_2D = sampleEllipse(
+        num_ellipse_samples,
         ellipse.center,
         ellipse.axes_lengths,
         ellipse.rotation_matrix,
@@ -503,14 +751,131 @@ def createEllipse(data, time, ssb_normal, do_plotting):
         do_plotting
     )
 
-    # Transform the ellipse back to the original 3D space
+    # Calculate meta data for the samples points on the ellipse
+    texture_coordinates, densities = calcMetaData(samples_2D, intersections_2d)
 
-    # Return the samples of the ellipse in their correct 3D position
-    # Dummy
-    return np.array([0, 0, 1])
+    # TODO: Create textures with more meta data for this timestep
+    # Points texture 
+    # Time lags texture
+
+    # Transform the ellipse samples back to the original 3D space
+    samples_3D = util.invTransformPointsToXYPlane(
+        samples_2D,
+        ellipsoid.center,
+        mean_velocity,
+        do_plotting
+    )
+
+    # Plot the final ellipse samples in 3D space related to the original ellipsoid
+    if do_plotting:
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, samples_3D, alpha = 0.6)
+        plotting.plotPoint3D(figure_axes, ellipsoid.center, 250, "red", 1.0, 'x')
+        plotting.plotEllipsoid(
+            figure_axes,
+            ellipsoid.center,
+            ellipsoid.axes_lengths,
+            ellipsoid.rotation_matrix
+        )
+        plt.title("Plot of the sampled 2D ellipse and the original 3D ellipsoid")
+        plt.show()
+
+    # Then inverse normalize everything to be in the correct positions in the original
+    # space
+    samples_3D_non_normalized = util.invNormalizePoints(
+        samples_3D,
+        offsets,
+        scaling_factors
+    )
+
+    # And do not forget to inverse normalize the ellipsoid center as well
+    ellipsoid.center = util.invNormalizePoint(
+        ellipsoid.center,
+        offsets,
+        scaling_factors
+    )
+
+    # And the axes lengths of the ellipsoid
+    # First make sure the axes are in their acurate length
+    major_axis = ellipsoid.axes[0]
+    major_axis = major_axis / np.linalg.norm(major_axis)
+    major_axis = major_axis * ellipsoid.axes_lengths[0]
+
+    normal_axis = ellipsoid.axes[1]
+    normal_axis = normal_axis / np.linalg.norm(normal_axis)
+    normal_axis = normal_axis * ellipsoid.axes_lengths[1]
+
+    minor_axis = ellipsoid.axes[2]
+    minor_axis = minor_axis / np.linalg.norm(minor_axis)
+    minor_axis = minor_axis * ellipsoid.axes_lengths[2]
+
+    # Then scale each axis in the x, y and z direction seperatly with the scaling factors
+    major_axis[0] = major_axis[0] * scaling_factors[0]
+    major_axis[1] = major_axis[1] * scaling_factors[1]
+    major_axis[2] = major_axis[2] * scaling_factors[2]
+
+    normal_axis[0] = normal_axis[0] * scaling_factors[0]
+    normal_axis[1] = normal_axis[1] * scaling_factors[1]
+    normal_axis[2] = normal_axis[2] * scaling_factors[2]
+
+    minor_axis[0] = minor_axis[0] * scaling_factors[0]
+    minor_axis[1] = minor_axis[1] * scaling_factors[1]
+    minor_axis[2] = minor_axis[2] * scaling_factors[2] 
+
+    # Then measure the new length of the axes and that is the non normalized axes lengths
+    ellipsoid.axes_lengths[0] = np.linalg.norm(major_axis)
+    ellipsoid.axes_lengths[1] = np.linalg.norm(normal_axis)
+    ellipsoid.axes_lengths[2] = np.linalg.norm(minor_axis)
+
+    # Then the new rotation matrix can then be constructed with the new axes in unit
+    # length
+    major_axis = major_axis / np.linalg.norm(major_axis)
+    normal_axis = normal_axis / np.linalg.norm(normal_axis)
+    minor_axis = minor_axis / np.linalg.norm(minor_axis)
+
+    rotaion_matrix = np.array([major_axis, normal_axis, minor_axis])
+    ellipsoid.rotation_matrix = rotaion_matrix.T
+
+    # Plot the original points and the ellipse sample points in non-normalized space
+    # together with the non-normalized ellipsoid
+    if do_plotting:
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, coordinates, is_normalized = False)
+        plotting.plotPoints3D(
+            figure_axes,
+            samples_3D_non_normalized,
+            color = "red",
+            is_normalized = False
+        )
+        plotting.plotEllipsoid(
+            figure_axes,
+            ellipsoid.center,
+            ellipsoid.axes_lengths,
+            ellipsoid.rotation_matrix,
+            is_normalized = False
+        )
+        plt.title("Plot of the coordinates, the ellipse samples and the ellipsoid in non-normalized space")
+        plt.show()
+
+    # Create a list of EllipseSamplePoint data objects for each sample point to store the
+    # data in an organized manner
+    ellipse_sample_points = []
+    for sample in range(samples_3D.shape[1]):
+        # Create the EllipseSamplePoint data object
+        ellipse_sample_points.append(EllipseSamplePoint(
+            samples_2D[:, sample],
+            samples_3D_non_normalized[:, sample],
+            texture_coordinates[:, sample],
+            densities[sample]
+        ))
+
+    # Return the full ellipse for this timestep, with its samples points and meta data
+    return ellipse_sample_points, ellipsoid
 
 
-def createEllipses(data, out_directory, do_plotting):
+def createEllipses(data, num_ellipse_samples, out_directory, do_plotting):
     """
     Take the input data and create a list of all ellipses that will be the base for the
     tube
@@ -520,7 +885,8 @@ def createEllipses(data, out_directory, do_plotting):
         out_directory: The outpur directory to store results. Here only textures will be 
                        created and saved.
         do_plotting: Whether or not to show plots during the calculations
-    Output: A list of all ellipses to create the tube for the input data
+    Output:
+        A list of all ellipses to create the tube for the input data
     """
     
     # Create a directory to store the textures for each ellipse
@@ -534,9 +900,30 @@ def createEllipses(data, out_directory, do_plotting):
     ssb_normal = util.getSolarSystemNormal(["Jan 1, 2015"])
 
     # Loop over all timesteps
-    ellipses = []
+    time_ellipses = []
     for t in range(data.num_time_steps):
-        ellipses.append(createEllipse(data, t, ssb_normal, do_plotting))
+        # Create one ellipse and ellipsoid for this timestep
+        ellipse_sample_points, ellipsoid = createEllipse(
+            data,
+            t,
+            num_ellipse_samples,
+            ssb_normal,
+            do_plotting
+        )
+        # TODO: Make the number of generated textures configurable and automatically
+        # adjust when it comes to witing the tube file
 
-    return ellipses
+        # Create the TubeEllipse data object for this timestep
+        time_ellipse = TubeEllipse(
+            data.time_data[t],
+            ellipsoid.center,
+            None, # TODO: Create and store textures
+            ellipse_sample_points,
+            ellipsoid
+        )
+
+        # Store the ellipse and ellipsoid
+        time_ellipses.append(time_ellipse)
+
+    return time_ellipses
     

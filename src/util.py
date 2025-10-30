@@ -1,9 +1,10 @@
 import numpy as np
 import spiceypy as spice
 
+import matplotlib.pyplot as plt
 import src.plotting as plotting
 
-EPSILON = 1e-10
+EPSILON = 1e-4
 
 
 def normalizePoints(points):
@@ -41,6 +42,49 @@ def normalizePoints(points):
     return normalized_points, offsets, scaling_factors
 
 
+def invNormalizePoints(normalized_points, offsets, scaling_factors):
+    """
+    Inverse normalize the input points from being between 0 and 1 for each dimention
+
+    Input:
+        normalized_points: The points to inverse normalize
+        offset: The offset for each dimension (minimum value)
+        scaling_factors: The scaling factor for each dimension (maximum value - minimum value)
+    Output:
+        points: The inverse normalized points
+    """
+
+    # Inverse normalize the points from being between 0 and 1 for each dimention
+    points = np.zeros(normalized_points.shape)
+    points[0, :] = normalized_points[0, :] * scaling_factors[0] + offsets[0] 
+    points[1, :] = normalized_points[1, :] * scaling_factors[1] + offsets[1]
+    points[2, :] = normalized_points[2, :] * scaling_factors[2] + offsets[2] 
+
+    # Return new set of points that are normalized and the scaling factors
+    return points
+
+def invNormalizePoint(normalized_point, offsets, scaling_factors):
+    """
+    Inverse normalize the input point from being between 0 and 1 for each dimention
+
+    Input:
+        normalized_point: The point to inverse normalize
+        offset: The offset for each dimension (minimum value)
+        scaling_factors: The scaling factor for each dimension (maximum value - minimum value)
+    Output:
+        point: The inverse normalized point
+    """
+
+    # Inverse normalize the point from being between 0 and 1 for each dimention
+    point = normalized_point
+    point[0] = normalized_point[0] * scaling_factors[0] + offsets[0] 
+    point[1] = normalized_point[1] * scaling_factors[1] + offsets[1]
+    point[2] = normalized_point[2] * scaling_factors[2] + offsets[2] 
+
+    # Return new set of point that are normalized and the scaling factors
+    return point
+
+
 # Common math functions
 def projectVectorToPlane(vector, normal):
     """
@@ -51,8 +95,8 @@ def projectVectorToPlane(vector, normal):
         normal: The normal of the plane to project the vector onto
     Output: The input vector projected onto the input plane
     """
-                    
-    return vector - ((np.dot(vector, normal) / np.dot(normal, normal)) * normal)
+    
+    return vector - (np.dot(vector, normal) / np.dot(normal, normal) * normal)
 
 
 def transformPointToXYPlane(point, translation, rotation_matrix):
@@ -71,6 +115,25 @@ def transformPointToXYPlane(point, translation, rotation_matrix):
 
     # And then rotate it to the XY plane
     return rotation_matrix @ translated_point
+
+
+def invTransformPointToXYPlane(point, translation, rotation_matrix):
+    """
+    Transform the input point with the given translation and rotation onto the XY plane.
+
+    Input:
+        point: A point to transform in an inverse manner
+        translation: The translation to get the point from the XY plane to the input plane
+        rotation_matrix: The rotation matrix to rotate the point from the XY plane to the
+                         input plane. The inversion happens before callign this function.
+    Output: The transformed point on the input plane
+    """
+
+    # First rotate the point around the origin
+    rotated_point = rotation_matrix @ point
+
+    # And then translate the point from the origin
+    return rotated_point + translation
 
 
 def calcRotationMatrix(vector, target_vector):
@@ -107,61 +170,6 @@ def calcRotationMatrix(vector, target_vector):
     return np.eye(3) + K * sin_a + K @ K * (1 - cos_a)
 
 
-# TODO: This function is not used at the moment, but I will keep it around for some time
-# In case the Rodrigues rotation matrix approach doesn't work as expected
-def transformPointToXYPlaneOrtho(point, plane_center, plane_normal):
-    # Put the camera stright in front of the plane
-    camera_pos = plane_center + (plane_normal / np.linalg.norm(plane_normal))
-
-    # Set the camera to look at the plane center
-    camera_direction = -plane_normal / np.linalg.norm(plane_normal)
-
-    # Get the right direction of the camera
-    # We get this by crossing the camera direction with the world up vector
-    camera_right = np.cross(camera_direction, np.array([0, 1, 0]))
-
-    # Now get the actual up vector of the camera
-    camera_up = np.cross(camera_right, camera_direction)
-
-    # Create a look at matrix, i.e. the view matrix
-    look_at = np.array([
-        [camera_right[0], camera_right[1], camera_right[2], 0],
-        [camera_up[0], camera_up[1], camera_up[2], 0],
-        [camera_direction[0], camera_direction[1], camera_direction[2], 0],
-        [0, 0, 0, 1]
-    ])
-    view_matrix = look_at @ np.array([
-        [ 1, 0, 0, -camera_pos[0]],
-        [ 0, 1, 0, -camera_pos[1]],
-        [ 0, 0, 1, -camera_pos[2]],
-        [ 0, 0, 0, 1]
-    ])
-
-    # Setup parameters for the orthografic projection matrix
-    top = 1.5
-    bottom = -1.5
-    right = 1.5
-    left = -1.5
-    near = 0.1
-    far = 5.0
-
-    # Calculate the orthografic projection matrix
-    ortho_matrix = np.array([
-        [2 / (right - left), 0, 0, -(right + left) / (right - left)],
-        [0, 2/(top - bottom), 0, -(top + bottom) / (top - bottom)],
-        [0, 0, -2/(far - near), -(far + near) / (far - near)],
-        [0, 0, 0, 1]
-    ])
-    
-    # Apply the camera transformations to the point
-    point_clip = ortho_matrix @ view_matrix @ np.array([point[0], point[1], point[2], 1])
-
-    # Perform perspective division to get the normalized device coordinates
-    # For orthographic projection this doesn't change the coordinates
-    # Therefore we just return the x, y, and z coordinates and ignore the w coordinate
-    return point_clip[:3]
-
-
 def transformPointsToXYPlane(points, plane_center, plane_normal, do_plotting):
     """
     Transform the input points on the given plane to the XY plane. The input plane is
@@ -194,15 +202,79 @@ def transformPointsToXYPlane(points, plane_center, plane_normal, do_plotting):
     
     # Plot the result if requested
     if do_plotting:
-        plotting.plotPoints(transformed_points)
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, transformed_points, is_normalized = True)
+        plt.title("Plot of transformed points onto the XY plane")
+        plt.show()
 
     # Check that all points are on the XY plane
-    # TODO: Turn this assertion back on 
-    #for p in range(points.shape[1]):
-        #assert np.abs(transformed_points[2, p]) < EPSILON, "Not on XY plane"
+    z_value = transformed_points[2, 0]
+    for p in range(points.shape[1]):
+        if np.abs(transformed_points[2, p] - z_value) > EPSILON:
+            print('\033[41mNot on XY plane\033[0m')
+            print('difference:', np.abs(transformed_points[2, p] - z_value))
 
     # Return the XY coordinates of the transformed points
     return transformed_points[:2, :]
+
+
+def invTransformPointsToXYPlane(points, plane_center, plane_normal, do_plotting):
+    """
+    Inverse transform the input points from the XY plane to the given plane. The input
+    plane is defined by its center point and normal. The XY plane have a normal of
+    (0, 0, 1)
+
+    Input:
+        points: A list of points on the XY plane to transform to the input plane in 2D
+        plane_center: The center point of the input plane. This point must be part of the 
+                      input plane.
+        plane_normal: The normal of the input plane
+        do_plotting: Whether to do plotting or not
+
+    Output: The transformed points on the input plane in 3D
+    """
+
+    # The translation is the same as the plane center vector
+    translation = plane_center
+
+    # Find the rotation matrix to rotate the plane normal to be aligned with the Z axis
+    rotation_matrix = calcRotationMatrix(plane_normal, np.array([0, 0, 1]))
+    rotation_matrix = np.linalg.inv(rotation_matrix)
+    
+    # First convert all 2D points to 3D by adding a Z coordinate of 0
+    points_3D = np.zeros((3, points.shape[1]))
+    points_3D[0, :] = points[0, :]
+    points_3D[1, :] = points[1, :]
+
+    # Apply the transformation to all points
+    transformed_points = np.zeros(points_3D.shape)
+    for p in range(points.shape[1]):
+        transformed_points[:, p] = invTransformPointToXYPlane(
+            points_3D[:, p],
+            translation,
+            rotation_matrix
+        )
+    
+    # Plot the result if requested
+    if do_plotting:
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, transformed_points, is_normalized = True)
+        plotting.plotPlane(figure_axes, plane_center, plane_normal)
+        plt.title("Plot of transformed points from the XY plane to the input plane")
+        plt.show()
+
+    # Check that all points are on the input plane. Formula from:
+    # https://stackoverflow.com/questions/17227149/using-dot-product-to-determine-if-point-lies-on-a-plane
+    for p in range(points.shape[1]):
+        dot_product = np.dot(plane_center - transformed_points[:, p], plane_normal)
+        if np.abs(dot_product) > EPSILON:
+            print('\033[41mNot on input plane\033[0m')
+            print('difference:', np.abs(dot_product))
+
+    # Return the transformed points on the input plane
+    return transformed_points
 
 
 def calcPlaneLineIntersection(normal, center, line_start, line_direction):
@@ -267,4 +339,4 @@ def getSolarSystemNormal(utc_time: list[str]):
     ssb_normal = cropped_transform_matrix @ eclip_normal
 
     # Return the normalized vector
-    return ssb_normal/np.linalg.norm(ssb_normal)
+    return eclip_normal/np.linalg.norm(eclip_normal)

@@ -28,20 +28,20 @@ def createJinjaData(fileContent):
     data = data + "    \"z\": \"" + str(polygon["center"]["z"]) + "\",\n"
 
     # Rotation
-    data = data + "    \"x1\": \"" + str(polygon["axes-direction"]["x1"]) + "\",\n"
-    data = data + "    \"x2\": \"" + str(polygon["axes-direction"]["x2"]) + "\",\n"
-    data = data + "    \"x3\": \"" + str(polygon["axes-direction"]["x3"]) + "\",\n"
-    data = data + "    \"y1\": \"" + str(polygon["axes-direction"]["y1"]) + "\",\n"
-    data = data + "    \"y2\": \"" + str(polygon["axes-direction"]["y2"]) + "\",\n"
-    data = data + "    \"y3\": \"" + str(polygon["axes-direction"]["y3"]) + "\",\n"
-    data = data + "    \"z1\": \"" + str(polygon["axes-direction"]["z1"]) + "\",\n"
-    data = data + "    \"z2\": \"" + str(polygon["axes-direction"]["z2"]) + "\",\n"
-    data = data + "    \"z3\": \"" + str(polygon["axes-direction"]["z3"]) + "\",\n"
+    data = data + "    \"x1\": \"" + str(polygon["rotation"]["x1"]) + "\",\n"
+    data = data + "    \"x2\": \"" + str(polygon["rotation"]["x2"]) + "\",\n"
+    data = data + "    \"x3\": \"" + str(polygon["rotation"]["x3"]) + "\",\n"
+    data = data + "    \"y1\": \"" + str(polygon["rotation"]["y1"]) + "\",\n"
+    data = data + "    \"y2\": \"" + str(polygon["rotation"]["y2"]) + "\",\n"
+    data = data + "    \"y3\": \"" + str(polygon["rotation"]["y3"]) + "\",\n"
+    data = data + "    \"z1\": \"" + str(polygon["rotation"]["z1"]) + "\",\n"
+    data = data + "    \"z2\": \"" + str(polygon["rotation"]["z2"]) + "\",\n"
+    data = data + "    \"z3\": \"" + str(polygon["rotation"]["z3"]) + "\",\n"
 
     # Scale
-    data = data + "    \"a\": \"" + str(polygon["axes-length"]["a"]) + "\",\n"
-    data = data + "    \"b\": \"" + str(polygon["axes-length"]["b"]) + "\",\n"
-    data = data + "    \"c\": \"" + str(polygon["axes-length"]["c"]) + "\"\n"
+    data = data + "    \"a\": \"" + str(polygon["axes-lengths"]["a"]) + "\",\n"
+    data = data + "    \"b\": \"" + str(polygon["axes-lengths"]["b"]) + "\",\n"
+    data = data + "    \"c\": \"" + str(polygon["axes-lengths"]["c"]) + "\"\n"
 
     if isLast:
       data = data + "  }\n"
@@ -58,8 +58,8 @@ def writeDataFile(filename, data):
 
 def main():
   # Specify the input and output
-  inputFilename = "./jsonData/dummy-data.json"
-  outputFilename ="./jinjaData/data_dummy.py"
+  inputFilename = "./jsonData/tube_2023_CX1.json"
+  outputFilename ="./jinjaData/jinja_2023_CX1.py"
 
   content = readFile(inputFilename)
   data = createJinjaData(content)

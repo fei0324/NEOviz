@@ -10,6 +10,7 @@ import src.ellipse as ellipse
 import src.tube as tube 
 
 
+# The number of meters in one Astronomical Unit (AU)
 AU = 149597870700
 
 # TODO: Rename to be more descriptive
@@ -51,7 +52,6 @@ def loadData(data_directory):
         if filename.startswith(coordinates_filename_start):
             variants_coordinates_file = filename
             break
-    print("Loading file", variants_coordinates_file)
     
     # Find the variants velocities file
     variants_velocities_file = ""
@@ -59,13 +59,13 @@ def loadData(data_directory):
         if filename.startswith(velocities_filename_start):
             variants_velocities_file = filename
             break
-    print("Loading file", variants_velocities_file)
     
     # Get the time file from the directory. All variants use the same timesteps
     time_file = os.path.join(data_directory, times_filename)
     time_data = np.load(time_file)
 
     # Load the coordinate data
+    print("Loading file", variants_coordinates_file)
     variants_coordinates = np.load(
         os.path.join(data_directory, variants_coordinates_file)
     )
@@ -76,6 +76,7 @@ def loadData(data_directory):
         variants_coordinates[v] = AU * variants_coordinates[v]
 
     # Load the velocity data
+    print("Loading file", variants_velocities_file)
     variants_velocities = np.load(
         os.path.join(data_directory, variants_velocities_file)
     )
@@ -121,13 +122,17 @@ if __name__ == "__main__":
 
     # Parse any input arguments
     do_plotting = True
+    num_ellipse_samples = 80
+    tube_filename = "tube_2023_CX1.json"
 
     # Select the input data
     input_directory = "./src/orbit_propagation/generated_data/historical/2023 CX1/2023-02-13T02.38.19.001/"
+    #input_directory = "./src/data/2004 MN4 prev/2004-12-27T21.28.37.000"
     print("Loading data from", input_directory)
 
     # Create the directory for output
     out_directory = "./src/generated_data/historical/2023 CX1/2023-02-13T02.38.19.001/"
+    #out_directory = "./src/generated_data/prev/2004 MN4 prev/2004-12-27T21.28.37.000"
     os.makedirs(out_directory, exist_ok = True)
     print("Results will be stored in", out_directory)
 
@@ -136,8 +141,19 @@ if __name__ == "__main__":
 
     # Get the polygons of the tube
     #old.main(input_dir, out_dir)
-    ellipses = ellipse.createEllipses(data, out_directory, do_plotting)
+    time_ellipses = ellipse.createEllipses(
+        data,
+        num_ellipse_samples,
+        out_directory,
+        do_plotting
+    )
 
     # Perform analysis (if needed)
 
-    # Create the tube file
+    # Write the tube file
+    tube.writeTube(
+        tube_filename,
+        out_directory,
+        time_ellipses,
+        num_ellipse_samples
+    )
