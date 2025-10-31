@@ -17,6 +17,7 @@ from sklearn.metrics.pairwise import pairwise_distances
 from src.ext.mvee import mvee2
 
 import src.util as util
+import src.texture as texture
 import src.plotting as plotting
 
 EPSILON = 1e-4
@@ -44,7 +45,7 @@ class EllipseSamplePoint:
 class TubeEllipse:
     time: str
     center: list
-    textures: list
+    texture: str
     samples: list
     ellipsoid: Ellipsoid
 
@@ -608,13 +609,18 @@ def calcMetaData(ellipse_samples, intersection_points):
     Output:
         texture_coordinates: The texture coordinates for each sample point
         densities: The density value for each sample point
+        range_x: The min and max x value of the ellipse sample points
+        range_y: The min and max y value of the ellipse sample points
     """
 
     # Find the largest x and y value to set the texture coordinates between 0 and 1
     max_x = np.max(ellipse_samples[0, :])
     min_x = np.min(ellipse_samples[0, :])
+    range_x = [min_x, max_x]
+
     max_y = np.max(ellipse_samples[1, :])
     min_y = np.min(ellipse_samples[1, :])
+    range_y = [min_y, max_y]
 
     # For the density calculation, we accumilate the distances from each sample point to
     # all intersection points. The density is then the inverse of this accumilated
@@ -626,9 +632,14 @@ def calcMetaData(ellipse_samples, intersection_points):
     texture_coordinates = np.zeros((2, ellipse_samples.shape[1]))
     densities = []
     for sample in range(ellipse_samples.shape[1]):
-        # Texture coordinate (the u and v are flipped in OpenSpace)
-        u = (ellipse_samples[1, sample] - min_y) / (max_y - min_y)
-        v = (ellipse_samples[0, sample] - min_x) / (max_x - min_x)
+        # Texture coordinates
+        u = (ellipse_samples[0, sample] - min_x) / (max_x - min_x)
+        v = (ellipse_samples[1, sample] - min_y) / (max_y - min_y)
+
+        # Invert u coordinate since OpenSpace uses a different coordinate system for
+        # textures
+        u = 1.0 - u
+
         texture_coordinates[:, sample] = np.array([u, v])
 
         # Density
@@ -649,34 +660,104 @@ def calcMetaData(ellipse_samples, intersection_points):
     # larger distance is smaller density
     for d in range(len(densities)):
         # Normalize the density value between 0 and 1
-        densities[d] = (densities[d] - min_accumilated_distance) / (max_accumilated_distance - min_accumilated_distance)
+        densities[d] = (densities[d] - min_accumilated_distance) / (
+            max_accumilated_distance - min_accumilated_distance
+        )
 
         # Invert the density value
         densities[d] = 1.0 - densities[d]
 
-    return texture_coordinates, densities
+    return texture_coordinates, densities, range_x, range_y
 
 
-def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
+def invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors):
+    """
+    Inverse normalize the ellipsoid parameters to go from normalized space back to the
+    original space.
+
+    Input:
+        ellipsoid: The ellipsoid data object in normalized space
+        offsets: The offsets used to normalize the points
+        scaling_factors: The scaling factors used to normalize the points
+    Output:
+        ellipsoid: The ellipsoid data object in original space
+    """
+
+    # Start with the center point
+    ellipsoid.center = util.invNormalizePoint(
+        ellipsoid.center,
+        offsets,
+        scaling_factors
+    )
+
+    # The axes of the ellispoid needs to be scaled according to the scaling factors
+    # applied during normalization. This is a bit more complicated since each axis
+    # needs to be scaled in each direction seperatly.
+    # First make sure the axes are in their acurate length
+    major_axis = ellipsoid.axes[0]
+    major_axis = major_axis / np.linalg.norm(major_axis)
+    major_axis = major_axis * ellipsoid.axes_lengths[0]
+
+    middle_axis = ellipsoid.axes[1]
+    middle_axis = middle_axis / np.linalg.norm(middle_axis)
+    middle_axis = middle_axis * ellipsoid.axes_lengths[1]
+
+    minor_axis = ellipsoid.axes[2]
+    minor_axis = minor_axis / np.linalg.norm(minor_axis)
+    minor_axis = minor_axis * ellipsoid.axes_lengths[2]
+
+    # Then scale each axis in the x, y and z direction seperatly with the scaling factors
+    major_axis[0] = major_axis[0] * scaling_factors[0]
+    major_axis[1] = major_axis[1] * scaling_factors[1]
+    major_axis[2] = major_axis[2] * scaling_factors[2]
+
+    middle_axis[0] = middle_axis[0] * scaling_factors[0]
+    middle_axis[1] = middle_axis[1] * scaling_factors[1]
+    middle_axis[2] = middle_axis[2] * scaling_factors[2]
+
+    minor_axis[0] = minor_axis[0] * scaling_factors[0]
+    minor_axis[1] = minor_axis[1] * scaling_factors[1]
+    minor_axis[2] = minor_axis[2] * scaling_factors[2] 
+
+    # Then measure the new length of the axes and that is the non normalized axes lengths
+    ellipsoid.axes_lengths[0] = np.linalg.norm(major_axis)
+    ellipsoid.axes_lengths[1] = np.linalg.norm(middle_axis)
+    ellipsoid.axes_lengths[2] = np.linalg.norm(minor_axis)
+
+    # Then the new rotation matrix can be constructed with the new axes in unit length
+    major_axis = major_axis / np.linalg.norm(major_axis)
+    middle_axis = middle_axis / np.linalg.norm(middle_axis)
+    minor_axis = minor_axis / np.linalg.norm(minor_axis)
+
+    rotaion_matrix = np.array([major_axis, middle_axis, minor_axis])
+    ellipsoid.rotation_matrix = rotaion_matrix.T
+
+    return ellipsoid
+
+
+def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_directory, 
+                  save_textures, texture_resolution, do_plotting):
     """
     Create just one ellipse in the tube
 
     Input:
-        data: A dataobject
-        time: The timestep
-        ssb_normal: The solar system normal
-        do_plotting: Whether or not to show plots during the calculations
+        data: The VariantData object with all of the variant data
+        time_step: The timestep index to create the ellipse for
+        num_ellipse_samples: The number of samples to take on the ellipse
+        ssb_normal: The SSB vector in 3D world space
+        save_textures: Whether to save textures for this timestep or not
+        do_plotting: Whether to do debug plotting or not
     Output:
         ellipse: One ellipse data object for the given timestep
         ellipsoid: One ellipsoid that encapsulated the 3D points for the given timestep
     """
 
-    print("\nTime", data.time_data[time])
-    print("Time step number", time)
+    print("\nTime", data.time_data[time_step])
+    print("Time step number", time_step)
     
     # Get the variant coordinate list for this timestep. The coordinates are in meters 
     # and relative the SUN (TODO: Or SSB need to check that)
-    coordinates = data.variants_coordinates[time].T
+    coordinates = data.variants_coordinates[time_step].T
 
     # Plot the points for this timestep
     if do_plotting:
@@ -702,7 +783,7 @@ def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
 
     # Transform all points to be on the a plane that is perpendicular to the direction
     # towards the Sun. The mean velocity vector is used as the normal of this plane.
-    velocities = data.variants_velocities[time].T
+    velocities = data.variants_velocities[time_step].T
     mean_velocity = np.mean(velocities, axis = 1)
 
     # Plot the points and the axes of the ellipsoid
@@ -727,7 +808,7 @@ def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
 
     # Transform all points to be on this plane, i.e. a slice of the tube going around the
     # Sun. Then transform this plane to be on the XY plane, giving a 2D problem
-    intersections_2d, time_lags = getPointsOnSlice(
+    intersections_2D, time_lags = getPointsOnSlice(
         normalized_coordinates,
         velocities,
         mean_velocity,
@@ -737,7 +818,7 @@ def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
     
     # Solve the 2D problem and create a minimum enclosing ellipse around the 2D points on
     # the XY plane
-    ellipse = createEllipsoid(intersections_2d, do_plotting, False)
+    ellipse = createEllipsoid(intersections_2D, do_plotting, False)
 
     # Sample the ellipse to create the polygon that make up the tube
     samples_2D = sampleEllipse(
@@ -752,11 +833,29 @@ def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
     )
 
     # Calculate meta data for the samples points on the ellipse
-    texture_coordinates, densities = calcMetaData(samples_2D, intersections_2d)
+    texture_coordinates, densities, range_x, range_y = calcMetaData(
+        samples_2D,
+        intersections_2D
+    )
 
     # TODO: Create textures with more meta data for this timestep
-    # Points texture 
-    # Time lags texture
+    saved_texture = ""
+    if save_textures:
+        # Points texture
+        points_texture = texture.generatePointsTexture(
+            range_x,
+            range_y,
+            intersections_2D,
+            texture_resolution,
+            texture_directory,
+            time_step,
+            texture_coordinates
+        )
+        saved_texture = points_texture
+
+        # Time lags texture
+
+
 
     # Transform the ellipse samples back to the original 3D space
     samples_3D = util.invTransformPointsToXYPlane(
@@ -789,53 +888,8 @@ def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
         scaling_factors
     )
 
-    # And do not forget to inverse normalize the ellipsoid center as well
-    ellipsoid.center = util.invNormalizePoint(
-        ellipsoid.center,
-        offsets,
-        scaling_factors
-    )
-
-    # And the axes lengths of the ellipsoid
-    # First make sure the axes are in their acurate length
-    major_axis = ellipsoid.axes[0]
-    major_axis = major_axis / np.linalg.norm(major_axis)
-    major_axis = major_axis * ellipsoid.axes_lengths[0]
-
-    normal_axis = ellipsoid.axes[1]
-    normal_axis = normal_axis / np.linalg.norm(normal_axis)
-    normal_axis = normal_axis * ellipsoid.axes_lengths[1]
-
-    minor_axis = ellipsoid.axes[2]
-    minor_axis = minor_axis / np.linalg.norm(minor_axis)
-    minor_axis = minor_axis * ellipsoid.axes_lengths[2]
-
-    # Then scale each axis in the x, y and z direction seperatly with the scaling factors
-    major_axis[0] = major_axis[0] * scaling_factors[0]
-    major_axis[1] = major_axis[1] * scaling_factors[1]
-    major_axis[2] = major_axis[2] * scaling_factors[2]
-
-    normal_axis[0] = normal_axis[0] * scaling_factors[0]
-    normal_axis[1] = normal_axis[1] * scaling_factors[1]
-    normal_axis[2] = normal_axis[2] * scaling_factors[2]
-
-    minor_axis[0] = minor_axis[0] * scaling_factors[0]
-    minor_axis[1] = minor_axis[1] * scaling_factors[1]
-    minor_axis[2] = minor_axis[2] * scaling_factors[2] 
-
-    # Then measure the new length of the axes and that is the non normalized axes lengths
-    ellipsoid.axes_lengths[0] = np.linalg.norm(major_axis)
-    ellipsoid.axes_lengths[1] = np.linalg.norm(normal_axis)
-    ellipsoid.axes_lengths[2] = np.linalg.norm(minor_axis)
-
-    # Then the new rotation matrix can then be constructed with the new axes in unit
-    # length
-    major_axis = major_axis / np.linalg.norm(major_axis)
-    normal_axis = normal_axis / np.linalg.norm(normal_axis)
-    minor_axis = minor_axis / np.linalg.norm(minor_axis)
-
-    rotaion_matrix = np.array([major_axis, normal_axis, minor_axis])
-    ellipsoid.rotation_matrix = rotaion_matrix.T
+    # Inverse normalize the ellipsoid too
+    ellipsoid = invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors)
 
     # Plot the original points and the ellipse sample points in non-normalized space
     # together with the non-normalized ellipsoid
@@ -872,18 +926,21 @@ def createEllipse(data, time, num_ellipse_samples, ssb_normal, do_plotting):
         ))
 
     # Return the full ellipse for this timestep, with its samples points and meta data
-    return ellipse_sample_points, ellipsoid
+    return ellipse_sample_points, ellipsoid, saved_texture
 
 
-def createEllipses(data, num_ellipse_samples, out_directory, do_plotting):
+def createEllipses(data, num_ellipse_samples, out_directory, save_textures,
+                   texture_resolution, do_plotting):
     """
     Take the input data and create a list of all ellipses that will be the base for the
     tube
 
     Input:
         data: Data object with the data from the input files
-        out_directory: The outpur directory to store results. Here only textures will be 
-                       created and saved.
+        num_ellipse_samples: The number of samples to take on each ellipse
+        out_directory: The output directory to store the generated textures
+        save_textures: Whether or not to save the generated textures
+        texture_resolution: The resolution of the generated textures
         do_plotting: Whether or not to show plots during the calculations
     Output:
         A list of all ellipses to create the tube for the input data
@@ -903,11 +960,14 @@ def createEllipses(data, num_ellipse_samples, out_directory, do_plotting):
     time_ellipses = []
     for t in range(data.num_time_steps):
         # Create one ellipse and ellipsoid for this timestep
-        ellipse_sample_points, ellipsoid = createEllipse(
+        ellipse_sample_points, ellipsoid, saved_texture = createEllipse(
             data,
             t,
             num_ellipse_samples,
             ssb_normal,
+            texture_directory,
+            save_textures,
+            texture_resolution,
             do_plotting
         )
         # TODO: Make the number of generated textures configurable and automatically
@@ -917,7 +977,7 @@ def createEllipses(data, num_ellipse_samples, out_directory, do_plotting):
         time_ellipse = TubeEllipse(
             data.time_data[t],
             ellipsoid.center,
-            None, # TODO: Create and store textures
+            saved_texture,
             ellipse_sample_points,
             ellipsoid
         )

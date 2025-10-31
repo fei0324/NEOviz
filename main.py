@@ -122,6 +122,8 @@ if __name__ == "__main__":
 
     # Parse any input arguments
     do_plotting = True
+    save_textures = True
+    texture_resolution = 500
     num_ellipse_samples = 80
     tube_filename = "tube_2023_CX1.json"
 
@@ -145,6 +147,8 @@ if __name__ == "__main__":
         data,
         num_ellipse_samples,
         out_directory,
+        save_textures,
+        texture_resolution,
         do_plotting
     )
 

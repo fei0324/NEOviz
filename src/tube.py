@@ -19,7 +19,7 @@ def createTube(data_dictionary, time_polygons, num_ellipse_samples):
         }
 
         # Texture filenames
-        data_dictionary["polygons"][time]["texture"] = time_polygon.textures
+        data_dictionary["polygons"][time]["texture"] = time_polygon.texture
         
 
         # Ellipsoid axes lengths
