@@ -71,7 +71,8 @@ def writeTube(tube_filename, out_directory, time_polygons, num_ellipse_samples):
     
     # Meta data for the whole tube file
     version = [int(0), int(2)]
-    texture_channels = ["density", "time-delta"]
+    #texture_channels = ["density", "positions", "time-delta"]
+    texture_channels = ["Densities", "Positions"]
 
     # File meta data and overall tube meta data
     data_dictionary = {
@@ -84,8 +85,8 @@ def writeTube(tube_filename, out_directory, time_polygons, num_ellipse_samples):
     }
 
     # Fill in the texture channels
-    for t in range(len(texture_channels)):
-        data_dictionary["texture-channels"].append(texture_channels[t])
+    for tc in range(len(texture_channels)):
+        data_dictionary["texture-channels"].append(texture_channels[tc])
 
     # Fill the dictionary with the tube data
     data_dictionary = createTube(data_dictionary, time_polygons, num_ellipse_samples)

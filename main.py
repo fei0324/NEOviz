@@ -121,7 +121,7 @@ if __name__ == "__main__":
     spice.furnsh(METAKERNEL)
 
     # Parse any input arguments
-    do_plotting = True
+    do_plotting = False
     save_textures = True
     texture_resolution = 500
     num_ellipse_samples = 80

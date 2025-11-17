@@ -226,7 +226,7 @@ def createEllipsoid(points, do_plotting, is_3d = True):
     )
 
 
-def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
+def getPointsOnSlice(coordinates, velocities, median_velocity, ellipsoid_center,
                      do_plotting):
     """
     Transform all points to be on a slice of the tube that is perpendicular to the 
@@ -238,9 +238,9 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
     Input:
         coordinates: The coordinates for the variants of this timestep
         velocities: The velocities for the variants of this timestep
-        mean_velocity: The normalized mean velocity of the variants. This is the normal 
-                       of the plane that is perpendicular to the direction towards the 
-                       Sun 
+        median_velocity: The median velocity of the variants. This is the normal 
+                         of the plane that is perpendicular to the direction towards the 
+                         Sun 
         ellipsoid_center: The center of the ellipsoid that encases all the points
         do_plotting: Whether debug plots should be done or not
     Output:
@@ -263,7 +263,7 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
         # As long as the distance to the plane is rather short and no major body
         # gravitationally interact with the variant, this should be a good approximation
         intersection_multiplier, intersection_coordinate = util.calcPlaneLineIntersection(
-            mean_velocity,
+            median_velocity,
             ellipsoid_center,
             variant_coordinate,
             variant_velocity
@@ -284,10 +284,10 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
             plane_variant_intersections,
             color = "red"
         )
-        plotting.plotPlane(figure_axes, ellipsoid_center, mean_velocity)
-        plotting.plotVector3D(figure_axes, ellipsoid_center, mean_velocity, "red",)
+        plotting.plotPlane(figure_axes, ellipsoid_center, median_velocity)
+        plotting.plotVector3D(figure_axes, ellipsoid_center, median_velocity, "red",)
         plt.title(
-            "Plot of original points and the projections on the mean velocity plane"
+            "Plot of original points and the projections on the median velocity plane"
         )
         plt.show()
 
@@ -297,7 +297,7 @@ def getPointsOnSlice(coordinates, velocities, mean_velocity, ellipsoid_center,
     transformed_intersections_2d = util.transformPointsToXYPlane(
         plane_variant_intersections,
         ellipsoid_center,
-        mean_velocity,
+        median_velocity,
         do_plotting
     )
 
@@ -396,7 +396,7 @@ def sampleEqualArcLength(num_samples, axes_lengths, circumference, precision):
     return np.array([sampled_points_x, sampled_points_y])
 
 
-def findStartingPoint(ssb_normal, center_3D, mean_velocity, center_2D, 
+def findStartingPoint(ssb_normal, center_3D, median_velocity, center_2D, 
                       ellipse_samples_2D, do_plotting = False):
     """
     Find the index to one of the sample points on the ellipse that is closest to the
@@ -406,7 +406,7 @@ def findStartingPoint(ssb_normal, center_3D, mean_velocity, center_2D,
     Input:
         ssb_normal: The SSB vector in 3D world space
         center_3D: The center of the ellipsoid in 3D world space
-        mean_velocity: The normal vector of the mean velocity plane
+        median_velocity: The normal vector of the median velocity plane
         center_2D: The center of the ellipse in 2D space
         ellipse_samples_2D: The sampled points along the ellipse in 2D space
                             (non-standard ellipse)
@@ -418,16 +418,16 @@ def findStartingPoint(ssb_normal, center_3D, mean_velocity, center_2D,
 
     # Normalize the vectors
     ssb_normal = ssb_normal / np.linalg.norm(ssb_normal)
-    mean_velocity = mean_velocity / np.linalg.norm(mean_velocity)
+    median_velocity = median_velocity / np.linalg.norm(median_velocity)
     
-    # Project the ssb 3D vector onto the 3D plane of the mean velocity
-    ssb_on_plane = util.projectVectorToPlane(ssb_normal, mean_velocity)
+    # Project the ssb 3D vector onto the 3D plane of the median velocity
+    ssb_on_plane = util.projectVectorToPlane(ssb_normal, median_velocity)
 
-    # Transform the projected 3D ssb vector on the mean velocity plane, to the XY plane
+    # Transform the projected 3D ssb vector on the median velocity plane, to the XY plane
     ssb_vector_2d = util.transformPointsToXYPlane(
         np.array([ssb_on_plane]).T,
         center_3D,
-        mean_velocity,
+        median_velocity,
         False
     )
 
@@ -437,7 +437,7 @@ def findStartingPoint(ssb_normal, center_3D, mean_velocity, center_2D,
         plotting.plotPoint2D(figure_axes, center_2D, 250, "red", 1.0, 'x')
         plotting.plotVector2D(figure_axes, center_2D, ssb_vector_2d, color = "red")
         plotting.plotPoints2D(figure_axes, ellipse_samples_2D)
-        plt.title("Projection of SSB vector onto the mean velocity plane")
+        plt.title("Projection of SSB vector onto the median velocity plane")
         plt.show()
 
     # Get the smallest angle from the transformed ssb vector to one of the ellipse sample
@@ -472,9 +472,9 @@ def findStartingPoint(ssb_normal, center_3D, mean_velocity, center_2D,
     
 
 def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_normal,
-                  center_3D, mean_velocity, do_plotting, precision = 1000):
+                  center_3D, median_velocity, do_plotting, precision = 1000):
     """
-    Sample the 2D ellipse on the 3D mean velocity plane in a consistent manner so that
+    Sample the 2D ellipse on the 3D median velocity plane in a consistent manner so that
     the points are always in the same order. The sampling should start from the
     intersection point of the projected SSB vector onto the plane and then go clockwise
     around the ellipse with each sample being equal arc distance between each other.
@@ -487,7 +487,7 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
         ssb_normal: The SSB vector in 3D world space
         center: The center of the ellipsoid in 3D world space (should be very similar to
                 center_2D in 3D world space)
-        mean_velocity: The normal vector of the mean velocity plane
+        median_velocity: The normal vector of the median velocity plane
         do_plotting: Whether or not to do debug plotting
         precision: The precision to use when calculating the circumference of the 
                    ellipse. Higher values give better precision (default is 1000).
@@ -538,7 +538,7 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
     starting_point_index = findStartingPoint(
         ssb_normal,
         center_3D,
-        mean_velocity,
+        median_velocity,
         center_2D,
         sampled_points,
         do_plotting
@@ -604,7 +604,7 @@ def calcMetaData(ellipse_samples, intersection_points):
 
     Input:
         ellipse_samples: The sampled points along the ellipse in 2D space
-        intersection_points: The intersection points of the variants on the mean
+        intersection_points: The intersection points of the variants on the median
                              velocity plane in 2D space
     Output:
         texture_coordinates: The texture coordinates for each sample point
@@ -782,9 +782,25 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
     ellipsoid = createEllipsoid(normalized_coordinates, do_plotting, True)
 
     # Transform all points to be on the a plane that is perpendicular to the direction
-    # towards the Sun. The mean velocity vector is used as the normal of this plane.
+    # towards the Sun. The median velocity vector is used as the normal of this plane.
     velocities = data.variants_velocities[time_step].T
+    median_velocity = np.median(velocities, axis = 1)
+
+    # Make a rough check if there are outliers in the data for this timestep by comparing
+    # the mean and median velocity directions
+    median_velocity_normalized = median_velocity / np.linalg.norm(median_velocity)
     mean_velocity = np.mean(velocities, axis = 1)
+    mean_velocity_normalized = mean_velocity / np.linalg.norm(mean_velocity)
+    angle = np.arccos(np.dot(mean_velocity_normalized, median_velocity_normalized))
+    if angle > np.deg2rad(5.0):
+        print("\033[41mWarning:\033[0m Mean and median velocities differ by more than 5 degrees")
+        print("Mean velocity:", mean_velocity_normalized)
+        print("Median velocity:", median_velocity_normalized)
+        print("Angle difference (degrees):", np.rad2deg(angle))
+
+    # TODO: Check the median and if the mean and median are too different then the
+    # we have outliers. We want to somehow mark this in the tube or texture to show the
+    # user that something interesting is happening here
 
     # Plot the points and the axes of the ellipsoid
     if do_plotting:
@@ -811,7 +827,7 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
     intersections_2D, time_lags = getPointsOnSlice(
         normalized_coordinates,
         velocities,
-        mean_velocity,
+        median_velocity,
         ellipsoid.center,
         do_plotting
     )
@@ -828,7 +844,7 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
         ellipse.rotation_matrix,
         ssb_normal,
         ellipsoid.center,
-        mean_velocity,
+        median_velocity,
         do_plotting
     )
 
@@ -841,27 +857,23 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
     # TODO: Create textures with more meta data for this timestep
     saved_texture = ""
     if save_textures:
-        # Points texture
-        points_texture = texture.generatePointsTexture(
+        # Generate all types of textures into one
+        saved_texture = texture.generateTexture(
             range_x,
             range_y,
-            intersections_2D,
             texture_resolution,
             texture_directory,
             time_step,
-            texture_coordinates
+            texture_coordinates,
+            intersections_2D,
+            time_lags            
         )
-        saved_texture = points_texture
-
-        # Time lags texture
-
-
 
     # Transform the ellipse samples back to the original 3D space
     samples_3D = util.invTransformPointsToXYPlane(
         samples_2D,
         ellipsoid.center,
-        mean_velocity,
+        median_velocity,
         do_plotting
     )
 
