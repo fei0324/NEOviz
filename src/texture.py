@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 major_version = 0
 minor_version = 2
 
+EPSILON = 1e-4
+
 def writeTexture(directory, filename, image_matrix, num_channels, resolution, min_values, 
                  max_values):
     """
@@ -73,7 +75,7 @@ def generateDensityTexture(range_x, range_y, resolution, variants_2D):
     """
 
     # Settings. TODO: Make this configurable on function call
-    brush_size = 5 # This is the radius of the brush in pixels, minus the center point
+    brush_size = 3 # This is the radius of the brush in pixels, minus the center point
     sigma = int(brush_size / 2.0) # Standard deviation for the Gaussian brush
     kernel_size = brush_size * 2 + 1
 
@@ -163,7 +165,7 @@ def generatePointsTexture(range_x, range_y, resolution, variants_2D):
     """
 
     # Settings. TODO: Make this configurable on function call
-    brush_size = 5 # This is the radius of the brush in pixels, minus the center point
+    brush_size = 2 # This is the radius of the brush in pixels, minus the center point
 
     # Create a blank square texture with the given resolution
     image_matrix = np.zeros((resolution, resolution))
@@ -201,7 +203,77 @@ def generatePointsTexture(range_x, range_y, resolution, variants_2D):
     return image_matrix, 0.0, 1.0
 
 
-# TODO: Add texture to show the timelags of the samples as a number 
+def generateTimeLagsTexture(range_x, range_y, resolution, variants_2D, time_lags):
+    """
+    Generate a time lag texture from the given time lags using a hard square brush.
+
+    Input:
+        range_x: The min and max values defining the range of x values for the texture.
+                 I.e. the min and max values of the ellipse samples points in x
+        range_y: The min and max values defining the range of y values for the texture.
+        resolution: The resolution of the texture to generate, assumed to be square
+        variants_2D: The intersected variant positions inside the ellipse in 2D
+        time_lags: The abstract time lag value for each variant in variants_2D, same order
+    Output:
+        image_matrix: The generated points positions image matrix
+        min_value: The minimum value in the texture. In this case, known to be 0
+        max_value: The maximum value. In this case we know it to be 1
+    """
+
+    # Settings. TODO: Make this configurable on function call
+    brush_size = 2 # This is the radius of the brush in pixels, minus the center point
+
+    # Find the minimum time lag value to make sure uninitialized areas are always below
+    # that value
+    min_time_value = np.min(time_lags) - EPSILON
+
+    # Create a blank square texture with the given resolution
+    image_matrix = np.zeros((resolution, resolution))
+    overlap_matrix = np.zeros((resolution, resolution))
+
+    # Plot the variants onto the texture
+    for v in range(variants_2D.shape[1]):
+        # Clamp the points to fit within the texture given the ellipse samples range in
+        # x and y
+        variant = variants_2D[:, v]
+        x_index = int(
+            (variant[0] - range_x[0]) / (range_x[1] - range_x[0]) * (resolution)
+        )
+        y_index = int(
+            (variant[1] - range_y[0]) / (range_y[1] - range_y[0]) * (resolution)
+        )
+
+        # Each variant should be "painted" onto the texture using a hard square brush that
+        # overwrites any previously "painted" variants.
+        # Determin the area of the image matrix that should be affected by the brush
+        # centered at (x_index, y_index)
+        x_start = max(0, x_index - brush_size)
+        x_end = min(resolution, x_index + brush_size + 1)
+
+        y_start = max(0, y_index - brush_size)
+        y_end = min(resolution, y_index + brush_size + 1)
+
+        # Apply the hard square brush to the image matrix. If any overlap occurs, we
+        # simply overwrite previous values. However, we are interested in seeing if
+        # overlap does occor so we will store the number of overlap in a seperate matrix
+        # NOTE: The end ranges are one past the last index, excluded. 
+        for x in range(x_start, x_end):
+            for y in range(y_start, y_end):
+                if abs(image_matrix[x, y]) < EPSILON:
+                    overlap_matrix[x, y] += 1
+                image_matrix[x, y] = time_lags[v]
+
+    # Transpose the image matrix to get the correct orientation in OpenSpace
+    image_matrix = image_matrix.T
+    overlap_matrix = overlap_matrix.T
+
+    # Find the largest and smallest density value in the texture
+    min_value = np.min(image_matrix)
+    max_value = np.max(image_matrix)
+    max_overlap = np.max(overlap_matrix)
+
+    # Return the image matrix with its min and max values
+    return image_matrix, min_value, max_value, overlap_matrix, 0.0, max_overlap
 
 
 def combineImages(images_list, resolution):
@@ -245,14 +317,22 @@ def generateTexture(samples_range_x, samples_range_y, resolution, directory, tim
     )
 
     # Generate the time lag texture
+    time_matrix, min_lag, max_lag, overlap_matrix, min_overlap, max_overlap = \
+    generateTimeLagsTexture(
+        samples_range_x,
+        samples_range_y,
+        resolution,
+        variants_2D,
+        time_lags
+    )
 
     # Combine all textures into one multi-channel texture
-    images_list = [density_matrix, points_matrix]
+    images_list = [density_matrix, points_matrix, time_matrix, overlap_matrix]
     combined_image_matrix = combineImages(images_list, resolution)
 
     # Combine min and max values for all images/channels
-    min_values = np.array([min_density, min_points])
-    max_values = np.array([max_density, max_points])
+    min_values = np.array([min_density, min_points, min_lag, min_overlap])
+    max_values = np.array([max_density, max_points, max_lag, max_overlap])
 
     # Write the texture to file
     full_filename = writeTexture(
