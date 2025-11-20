@@ -9,6 +9,7 @@ data/kernels/lsk/
 data/kernels/pck/
 data/kernels/spk/
 generated_data/
+src/data
 src/orbit_propagation/data/
 src/orbit_propagation/generated_data/
 src/transform/ellipsoids/
