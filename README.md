@@ -11,9 +11,9 @@ The implementation is described in "NEOviz: Uncertainty-Driven Visual Analysis o
 
 ## Installation
 
-For orbit propagation (the /orbit_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. Note that some of the dependencies of `adam_core` are currently only available on Linux, so a Linux distribution is highly recommended for this part of the computation. You can either download/clone the repository and install the required packages from scratch or use the provided Anaconda environment. 
+For orbit propagation (the /orbit_propagation directory), the code is tested with Python 3.11 and Ubuntu 22.04.4. Note that some of the dependencies of `adam_core` are currently only available on Linux, so a Linux distribution is highly recommended for this part of the computation. After downloading or cloning the repository you can install the required packages with Anaconda using either the _environment.yml_ or _requirements-linux.txt_ files.
 
-### Using Anaconda and the environment.yml file
+### Using the environment.yml file
 To use Anaconda to create the python environment from the _environment.yml_ file follow theese instructions:
 
 1. Create the python environment with the commnad `conda env create -n neoviz -f ./../environment.yml`
@@ -21,8 +21,10 @@ To use Anaconda to create the python environment from the _environment.yml_ file
 
 Unfortunatly, the library [choldate](https://github.com/modusdatascience/choldate) is not currently included in the environment and requier seperate installation. You can see instructions for that [here](#how-to-install-choldate). Note that choldate is only a required dependency for tube generation and not for the orbit propagation.
 
-### Create the environment from scratch
-If you use `conda`, a fresh environment can be created as follows: 
+### Using the requirements-linux.txt file
+Note that this form of installation might no longer work due to certain packages updates since this was written. 
+
+A fresh environment can be created as follows: 
 
 ```shell
 conda create -n propagate_obits_py311 python=3.11
@@ -82,7 +84,7 @@ Essentially you need to install one or more missing packages in QT. To figure ou
 
 <details>
     <summary>Example Output</summary>
-    ```shell
+    ```
     ./orbit_propagation/generated_data/historical/2023 CX1/2023-02-13T02.38.19.001/times_isot.npy
     ['variants_coords_10000.npy']
     ['variants_velo_10000.npy']
@@ -366,8 +368,6 @@ We output the following file struture:
 ```
 
 The textures are images that encode data about the cutplanes of the uncertainty tube. OpenSpace later applies transfer functions onto these textures to display them in the correct locations and scales in space.
-
-<img src="texture_example.png" width="400"/>
 
 The main function is `getEllipsePerSubmission()` with the following input parameters:
 + variants_dir: the directory of orbit variants from orbit propagation
