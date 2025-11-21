@@ -72,7 +72,7 @@ def writeTube(tube_filename, out_directory, time_polygons, num_ellipse_samples):
     # Meta data for the whole tube file
     version = [int(0), int(2)]
     #texture_channels = ["density", "positions", "time-delta"]
-    texture_channels = ["Density", "Position", "Time difference", "Overlap"]
+    texture_channels = ["Density", "Position", "Time difference", "Time difference range"]
 
     # File meta data and overall tube meta data
     data_dictionary = {
