@@ -72,6 +72,7 @@ def loadData(data_directory):
     print("Coordinate numpy shape", variants_coordinates.shape)
 
     # Scale the coordinate data to be in meters (from AU)
+    print("Scaling coordinates from AU to meters")
     for v in range(variants_coordinates.shape[0]):
         variants_coordinates[v] = AU * variants_coordinates[v]
 
@@ -83,6 +84,7 @@ def loadData(data_directory):
     print("Velocity numpy shape", variants_velocities.shape)
     
     # Scale the velocity data to be in meters per second (from AU per second)
+    print("Scaling velocities from AU/s to m/s")
     for v in range(variants_velocities.shape[0]):
         variants_velocities[v] = AU * variants_velocities[v]
 

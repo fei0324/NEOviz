@@ -90,6 +90,8 @@ def generateDensityTexture(range_x, range_y, resolution, variants_2D):
     # of the vector from the origin). Original formula from: 
     # https://www.geeksforgeeks.org/machine-learning/gaussian-kernel/
     gaussian_kernel = np.exp(-(xv**2 + yv**2) / (2 * sigma**2))
+    assert gaussian_kernel.shape == (kernel_size, kernel_size), \
+        "incorrect shape of the gaussian kernel"
 
     # Create a blank square texture with the given resolution
     image_matrix = np.zeros((resolution, resolution))
@@ -100,11 +102,18 @@ def generateDensityTexture(range_x, range_y, resolution, variants_2D):
         # x and y
         variant = variants_2D[:, v]
         x_index = int(
-            (variant[0] - range_x[0]) / (range_x[1] - range_x[0]) * (resolution)
+            (variant[0] - range_x[0]) / (range_x[1] - range_x[0]) * (resolution - 1)
         )
         y_index = int(
-            (variant[1] - range_y[0]) / (range_y[1] - range_y[0]) * (resolution)
+            (variant[1] - range_y[0]) / (range_y[1] - range_y[0]) * (resolution - 1)
         )
+
+        # Make sure the indices are within bounds
+        if x_index <= 0 or resolution <= x_index or y_index <= 0 or resolution <= y_index:
+            print("Variant index out of bounds: (", x_index, ",", y_index, ")")
+            print("This variant will be clamped to fit within the texture")
+            x_index = max(0, min(resolution - 1, x_index))
+            y_index = max(0, min(resolution - 1, y_index))
 
         # Each variant should be "painted" onto the texture using a gaussian brush that
         # superimposes to any previously "painted" variants. This gives a density effect.
@@ -125,10 +134,15 @@ def generateDensityTexture(range_x, range_y, resolution, variants_2D):
         kernel_y_end = min(kernel_size, resolution - y_index + brush_size)
 
         # Make sure the size for the image and the kernel are the same size
-        assert (x_end - x_start) == (kernel_x_end - kernel_x_start), \
-            "Mismatched kernel and image sizes in x direction"
-        assert (y_end - y_start) == (kernel_y_end - kernel_y_start), \
-            "Mismatched kernel and image sizes in y direction"
+        if image_matrix[x_start:x_end, y_start:y_end].shape != gaussian_kernel[
+                kernel_x_start:kernel_x_end, kernel_y_start:kernel_y_end
+            ].shape:
+            print("\033[41mError\033[0m")
+            print("Variant image index", x_index, y_index)
+            print("image shape", image_matrix[x_start:x_end, y_start:y_end].shape)
+            print("kernel shape", gaussian_kernel[kernel_x_start:kernel_x_end,
+                                                  kernel_y_start:kernel_y_end].shape)
+            assert False, "Mismatched shapes when applying gaussian kernel to image"
 
         # Apply the gaussian kernel to the image matrix. NOTE: The end ranges are one past
         # the last index, excluded
@@ -256,20 +270,48 @@ def generateTimeLagsTexture(range_x, range_y, resolution, variants_2D, time_lags
         y_start = max(0, y_index - brush_size)
         y_end = min(resolution, y_index + brush_size + 1)
 
-        # Apply the hard square brush to the image matrix. NOTE: The end ranges are one
-        # past the last index, excluded.
-        value = time_lags[v] 
-        time_matrix[x_start:x_end, y_start:y_end] = \
-            (value - min_time_value) / (max_time_value - min_time_value)
-
-        # Update the min and max range matrices. Note that this needs to be done pixel by
-        # pixel to handle any overlap
+        # Check if there will be any overlap with previously painted variants. This need
+        # to happen before we paint with this variants value
+        value = time_lags[v]
         for x in range(x_start, x_end):
             for y in range(y_start, y_end):
-                if value < min_range_matrix[x, y]:
-                    min_range_matrix[x, y] = value
-                if value > max_range_matrix[x, y]:
-                    max_range_matrix[x, y] = value
+                if time_matrix[x, y] > -0.1:
+                    # Overlap, then check if the time lag between the two samples are
+                    # different
+                    # If the new value is smller than the old, update the min
+                    if value < time_matrix[x, y]:
+                        min_range_matrix[x, y] = value
+
+                        # Check the cooresponding max value. If nothing has been written
+                        # already, then put the old value there to indicate that there
+                        # has been overlap here and by how much the time lag has deviated
+                        # between the two overlapping samples. However if multiple
+                        # overlaps have happened, we only want to keep the largest max
+                        # value
+                        max_range_matrix[x, y] = max(
+                            max_range_matrix[x, y],
+                            time_matrix[x, y]
+                        )
+
+                    # Or if it is larger than the old, update the max
+                    if value > time_matrix[x, y]:
+                        max_range_matrix[x, y] = value
+
+                        # Check the cooresponding min value. If nothing has been written
+                        # already, then put the old value there to indicate that there
+                        # has been overlap here and by how much the time lag has deviated
+                        # between the two overlapping samples. However if multiple
+                        # overlaps have happened, we only want to keep the smallest min
+                        # value
+                        min_range_matrix[x, y] = min(
+                            min_range_matrix[x, y],
+                            time_matrix[x, y]
+                        )
+
+        # Apply the hard square brush to the image matrix. NOTE: The end ranges are one
+        # past the last index, excluded.
+        time_matrix[x_start:x_end, y_start:y_end] = \
+            (value - min_time_value) / (max_time_value - min_time_value)
 
     # Get the range matrix by subtracting the min from the max
     for x in range(resolution):

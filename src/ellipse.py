@@ -39,6 +39,9 @@ class EllipseSamplePoint:
     position_3D: list
     texture_coordinate: list
     density: float
+    standard_deviation: list
+    variance: list
+    is_deviating: int
 
 # Data object for the full ellipse that will be written in the tube file
 @dataclass
@@ -598,17 +601,14 @@ def sampleEllipse(num_samples, center_2D, axes_lengths, rotation_matrix, ssb_nor
     return reordered_sampled_points
 
 
-def calcMetaData(ellipse_samples, intersection_points):
+def calcTextureCoordinates(ellipse_samples):
     """
-    Calculate some additional meta data for each sample point on the ellipse
+    Calculate the texture coordinates for each sample point on the ellipse
 
     Input:
         ellipse_samples: The sampled points along the ellipse in 2D space
-        intersection_points: The intersection points of the variants on the median
-                             velocity plane in 2D space
     Output:
         texture_coordinates: The texture coordinates for each sample point
-        densities: The density value for each sample point
         range_x: The min and max x value of the ellipse sample points
         range_y: The min and max y value of the ellipse sample points
     """
@@ -622,15 +622,8 @@ def calcMetaData(ellipse_samples, intersection_points):
     min_y = np.min(ellipse_samples[1, :])
     range_y = [min_y, max_y]
 
-    # For the density calculation, we accumilate the distances from each sample point to
-    # all intersection points. The density is then the inverse of this accumilated
-    # distance and normalized over this ellipse.
-    min_accumilated_distance = np.inf
-    max_accumilated_distance = -np.inf
-
-    # Calculate the meta data for each sample point
+    # Calculate the texture coordinate for each sample point
     texture_coordinates = np.zeros((2, ellipse_samples.shape[1]))
-    densities = []
     for sample in range(ellipse_samples.shape[1]):
         # Texture coordinates
         u = (ellipse_samples[0, sample] - min_x) / (max_x - min_x)
@@ -642,7 +635,30 @@ def calcMetaData(ellipse_samples, intersection_points):
 
         texture_coordinates[:, sample] = np.array([u, v])
 
-        # Density
+    return texture_coordinates, range_x, range_y
+
+
+def calcDensities(ellipse_samples, intersection_points):
+    """
+    Calculate a density value for each sample point on the ellipse based on the distance
+    to all intersection points.
+    Input:
+        ellipse_samples: The sampled points along the ellipse in 2D space
+        intersection_points: The intersection points of the variants on the 2D plane
+    Output:
+        densities: The density value for each sample point
+    """
+
+    # For the density calculation, we accumilate the distances from each sample point to
+    # all intersection points. The density is then the inverse of this accumilated
+    # distance and normalized over this ellipse.
+    min_accumilated_distance = np.inf
+    max_accumilated_distance = -np.inf
+
+    # Calculate the density for each sample point
+    densities = []
+    for sample in range(ellipse_samples.shape[1]):
+        # Accumilate the distance from this sample point to all intersection points
         accumilated_distance = 0.0
         for point in range(intersection_points.shape[1]):
             accumilated_distance += np.linalg.norm(
@@ -656,8 +672,8 @@ def calcMetaData(ellipse_samples, intersection_points):
         if (accumilated_distance < min_accumilated_distance):
             min_accumilated_distance = accumilated_distance
 
-    # Loop over all samples again to normalize the density values and invert it to be
-    # larger distance is smaller density
+    # Loop over all samples again to normalize the density values and invert it, so
+    # larger distances gives a smaller density
     for d in range(len(densities)):
         # Normalize the density value between 0 and 1
         densities[d] = (densities[d] - min_accumilated_distance) / (
@@ -667,7 +683,70 @@ def calcMetaData(ellipse_samples, intersection_points):
         # Invert the density value
         densities[d] = 1.0 - densities[d]
 
-    return texture_coordinates, densities, range_x, range_y
+    return densities
+
+
+def calcStatistics(intersection_points, ellipse_rotation):
+    """
+    Caclulate some statistics (standard deviation and variance) for the points on the 2D
+    plane. Make sure to use double floats for the calculations to get higher accuracy. 
+    Input:
+        intersection_points: The intersection points of the variants on the 2D plane
+        ellipse_rotation: The rotation matrix of the ellipse on the 2D plane
+    Output:
+        standard_deviation: The standard deviation of the intersection points along
+                            each ellipse axis
+        variance: The variance of the intersection points along each ellipse axis
+    """
+
+    # Rotate the intersection points, so the ellipse axes are aligned with the x and
+    # y axis
+    rotated_intersection_points = ellipse_rotation.T @ intersection_points
+
+    # Standard deviation of the intersection point positions
+    standard_deviation = np.std(rotated_intersection_points, axis = 1, dtype = np.float64)
+    print("Standard deviation:", standard_deviation)
+
+    # Variance of the intersection point positions
+    variance = np.var(rotated_intersection_points, axis = 1, dtype = np.float64)
+    print("Variance:", variance)
+
+    return standard_deviation, variance
+
+
+def checkForOutliers(intersection_points, ellipse_range_x, ellipse_range_y):
+    """
+    Check if there are any outliers of the variant intersection points on the 2D plane. An
+    outlier is defined as a point that lays outside of the bounding box of the ellipse.
+    An outlier can occur when the MVEE calculation fails to encase all points.
+
+    Input:
+        intersection_points: The intersection points of the variants on the 2D plane
+        ellipse_range_x: The min and max x value of the ellipse sample points
+        ellipse_range_y: The min and max y value of the ellipse sample points
+    Output:
+        has_outlier: 1 if there is at least one outlier, 0 otherwise
+    """
+
+    # Check if any point is outside of the bounding box of the ellipse
+    for point in range(intersection_points.shape[1]):
+        x = intersection_points[0, point]
+        y = intersection_points[1, point]
+
+        has_outlier = int(0)
+        num_outliers = 0
+        if (x < ellipse_range_x[0] or
+            x > ellipse_range_x[1] or
+            y < ellipse_range_y[0] or
+            y > ellipse_range_y[1]):
+            print("Point outside ellipse found at [x, y]", intersection_points[:, point])
+            has_outlier = int(1)
+            num_outliers += 1
+
+    if has_outlier:
+        print("Number of outliers found:", num_outliers)
+
+    return has_outlier
 
 
 def invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors):
@@ -788,19 +867,19 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
 
     # Make a rough check if there are outliers in the data for this timestep by comparing
     # the mean and median velocity directions
+    # TODO: Make this angle tolerance configurable
+    angle_tolerance = 0.5
+    is_deviating = int(0)
     median_velocity_normalized = median_velocity / np.linalg.norm(median_velocity)
     mean_velocity = np.mean(velocities, axis = 1)
     mean_velocity_normalized = mean_velocity / np.linalg.norm(mean_velocity)
     angle = np.arccos(np.dot(mean_velocity_normalized, median_velocity_normalized))
-    if angle > np.deg2rad(5.0):
-        print("\033[41mWarning:\033[0m Mean and median velocities differ by more than 5 degrees")
+    if angle > np.deg2rad(angle_tolerance):
+        is_deviating = int(1)
+        print("\033[41mWarning:\033[0m Mean and median velocities differ by more than the specified angle tolerance")
         print("Mean velocity:", mean_velocity_normalized)
         print("Median velocity:", median_velocity_normalized)
         print("Angle difference (degrees):", np.rad2deg(angle))
-
-    # TODO: Check the median and if the mean and median are too different then the
-    # we have outliers. We want to somehow mark this in the tube or texture to show the
-    # user that something interesting is happening here
 
     # Plot the points and the axes of the ellipsoid
     if do_plotting:
@@ -848,13 +927,24 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
         do_plotting
     )
 
-    # Calculate meta data for the samples points on the ellipse
-    texture_coordinates, densities, range_x, range_y = calcMetaData(
-        samples_2D,
-        intersections_2D
+    # Texture coordinate for the textures on the cutplane of the tube
+    texture_coordinates, range_x, range_y = calcTextureCoordinates(samples_2D)
+
+    # Check if there are any points on the 2D plane that are outside of the ellipse
+    has_outlier = checkForOutliers(intersections_2D, range_x, range_y)
+    is_deviating = max(is_deviating, has_outlier)
+
+    # Density values for each sample point on the ellipse
+    densities = calcDensities(samples_2D, intersections_2D)
+
+    # Calculate standard deviation and variance of the intersection points along the
+    # ellipse axes
+    standard_deviation, variance = calcStatistics(
+        intersections_2D,
+        ellipse.rotation_matrix
     )
 
-    # TODO: Create textures with more meta data for this timestep
+    # Create textures with more detailed data for this timestep
     saved_texture = ""
     if save_textures:
         # Generate all types of textures into one
@@ -934,7 +1024,10 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
             samples_2D[:, sample],
             samples_3D_non_normalized[:, sample],
             texture_coordinates[:, sample],
-            densities[sample]
+            densities[sample],
+            standard_deviation,
+            variance,
+            is_deviating
         ))
 
     # Return the full ellipse for this timestep, with its samples points and meta data
@@ -968,9 +1061,13 @@ def createEllipses(data, num_ellipse_samples, out_directory, save_textures,
     # not affect the overall results
     ssb_normal = util.getSolarSystemNormal(["Jan 1, 2015"])
 
+    # Only process the last 1000 timesteps
+    last_n_timesteps = 400
+    #last_n_timesteps = data.num_time_steps
+
     # Loop over all timesteps
     time_ellipses = []
-    for t in range(data.num_time_steps):
+    for t in range(data.num_time_steps - last_n_timesteps, data.num_time_steps):
         # Create one ellipse and ellipsoid for this timestep
         ellipse_sample_points, ellipsoid, saved_texture = createEllipse(
             data,

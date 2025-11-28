@@ -54,7 +54,12 @@ def createTube(data_dictionary, time_polygons, num_ellipse_samples):
                 "u": time_polygon.samples[p].texture_coordinate[0],
                 "v": time_polygon.samples[p].texture_coordinate[1], 
                 "data": {
-                    "density": time_polygon.samples[p].density
+                    "density": time_polygon.samples[p].density,
+                    "standard-deviation-major": time_polygon.samples[p].standard_deviation[0],
+                    "standard-deviation-minor": time_polygon.samples[p].standard_deviation[1],
+                    "variance-major": time_polygon.samples[p].variance[0],
+                    "variance-minor": time_polygon.samples[p].variance[1],
+                    "is-deviating": time_polygon.samples[p].is_deviating
                 }
             })
         data_dictionary["polygons"][time]["points"] = tube_polygon_points
