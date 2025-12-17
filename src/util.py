@@ -2,7 +2,7 @@ import numpy as np
 import spiceypy as spice
 
 import matplotlib.pyplot as plt
-import src.plotting as plotting
+import plotting as plotting
 
 EPSILON = 1e-4
 
@@ -340,3 +340,70 @@ def getSolarSystemNormal(utc_time: list[str]):
 
     # Return the normalized vector
     return eclip_normal/np.linalg.norm(eclip_normal)
+
+
+import pingouin as pg
+from matplotlib import pyplot as plt
+
+def checkGaussian(points):
+    """
+    Check if the given points (2D or 3D) are Gaussian distributed using
+    the Henze-Zirkler multivariate normality test from the package pingouin
+
+    Input:
+        points: input points must be in the shape (n_points, n_dimensions)
+    Returns:
+        boolean: True if the points are Gaussian distributed, False otherwise
+    """
+    
+    # First check if the input points are in the correct shape
+    assert points.shape[1] in [2, 3], "input points must be 2D or 3D, ordered in the shape (n_points, n_dimensions)"
+
+    # perform the Henze-Zirkler multivariate normality test
+    return pg.multivariate_normality(points).normal
+
+
+if __name__ == "__main__":
+
+    # Generate 300 2D Gaussian distributed points for normality testing
+    np.random.seed(123)
+    mean, cov, n = [4, 5], [(1, .6), (.6, 1)], 300
+    x, y = np.random.multivariate_normal(mean, cov, n).T
+    plt.scatter(x, y)
+    plt.show()
+    points = np.column_stack((x, y))
+    print(points.shape)
+    print(checkGaussian(points))  # True
+
+    # Uniformly sample 300 points from a disk, this is not Gaussian distributed
+    cx, cy = (0., 0.)
+    radius = 3
+    n = 300
+    theta = np.random.uniform(0, 2*np.pi, n)
+    u = np.random.uniform(0, 1, n)
+    r = radius * np.sqrt(u)   # crucial: sqrt for uniform area density
+
+    x = cx + r * np.cos(theta)
+    y = cy + r * np.sin(theta)
+    plt.scatter(x, y)
+    plt.show()
+    points = np.column_stack((x, y))
+    print(points.shape)  # (300, 2)
+    print(checkGaussian(points))  # False
+
+    # Test for Gaussian distributed 3D points
+    np.random.seed(123)
+    mean = [4, 5, 6]
+    cov = [
+        [1.0, 0.6, 0.2],
+        [0.6, 1.0, 0.4],
+        [0.2, 0.4, 1.0]
+    ]
+    n = 300
+    X = np.random.multivariate_normal(mean, cov, n)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(X[:,0], X[:,1], X[:,2], s=20)
+    plt.show()
+    print(X.shape)  # (300, 3)
+    print(checkGaussian(X))  # True
