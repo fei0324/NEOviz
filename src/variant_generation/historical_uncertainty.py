@@ -11,7 +11,7 @@ from adam_core.orbits import Orbits
 from adam_core.orbits import VariantOrbits
 from adam_assist import ASSISTPropagator
 
-import variant_generation.util as util
+import variant_generation.adam_util as adam_util
 import variant_generation.kernels as kernels
 from main import VariantsData
 
@@ -59,7 +59,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
     high_res_end_time = Time(configuration["high_res_end_time"])
     
     # Load the submission and best fit orbit data
-    submissions, submission_orbits = util.loadSubmissionsAndOrbits(
+    submissions, submission_orbits = adam_util.loadSubmissionsAndOrbits(
         mpc_directory,
         orbit_fits_directory
     )
@@ -113,14 +113,17 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             os.makedirs(submission_output_directory, exist_ok = True)
 
         # Create sample times from now to the end time
-        propagation_times, num_time_steps = util.getTimeSteps(submission_time, end_time)
+        propagation_times, num_time_steps = adam_util.getTimeSteps(
+            submission_time,
+            end_time
+        )
         
         # Propagate the best fit orbit for this submission forward in time
         # TODO: Make it posible to save this data to file and load it again so we do not
         # have to re-run it so often.
         # TODO: Use more samples for a better covariance matrix estimation
         num_samples = num_variants 
-        propagated_best_fit_orbit = util.propagateBestFitOrbit(
+        propagated_best_fit_orbit = adam_util.propagateBestFitOrbit(
             submission_orbit,
             propagator,
             propagation_times,
@@ -137,14 +140,14 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         if use_high_res_timeframe:
             # Find the timestep in the propagated best fit orbit that is closest to the
             # high resolution start time
-            high_res_start_time_actual, start_index = util.findVariantsStartTime(
+            high_res_start_time_actual, start_index = adam_util.findVariantsStartTime(
                 propagated_best_fit_orbit,
                 high_res_start_time
             )
 
             # Create new high resolution time steps for the variants over the high
             # resolution timeframe
-            variant_propagation_times, num_variant_time_steps = util.getTimeSteps(
+            variant_propagation_times, num_variant_time_steps = adam_util.getTimeSteps(
                 high_res_start_time_actual.to_astropy(),
                 high_res_end_time,
                 configuration["high_res_sample_multiplier"]
@@ -152,7 +155,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
 
         # Generate variants based on the propagated best fit orbit and propagate them
         # over time
-        propagated_variants = util.propagateVariants(
+        propagated_variants = adam_util.propagateVariants(
             propagated_best_fit_orbit,
             propagator,
             variant_propagation_times,
@@ -213,7 +216,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             # and velocities to already be sorted per timestep. However, to keep
             # backwards compatibility with previous variant files, we save the variants
             # to file in the original order
-            util.saveVariantsToFile(
+            adam_util.saveVariantsToFile(
                 propagated_variants,
                 times_isot,
                 covariances,
@@ -238,11 +241,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
              
     return variants_data
 
-
+"""
 if __name__ == "__main__":
-    """
-    No longer used
-    """
     # TODO: Parse any input arguments
     # Settings
     num_variants = 10000
@@ -280,3 +280,4 @@ if __name__ == "__main__":
     #high_res_end_time = Time("2005-02-01T21:00:00.000", format = "isot") # 2004 MN4 (test)
     high_res_end_time = Time("2029-05-13T00:00:00.000", format = "isot") # 2004 MN4
     #high_res_end_time = end_time # 2023 CX1
+"""

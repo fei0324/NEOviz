@@ -11,7 +11,7 @@ from adam_core.orbits import Orbits
 from adam_core.orbits import VariantOrbits
 from adam_assist import ASSISTPropagator
 
-import variant_generation.util as util
+import variant_generation.adam_util as adam_util
 import variant_generation.kernels as kernels
 #from main import VariantsData
 
@@ -47,7 +47,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
     num_variants = configuration["num_variants"]
     
     # Load the submission and best fit orbit data
-    submissions, submission_orbits = util.loadSubmissionsAndOrbits(
+    submissions, submission_orbits = adam_util.loadSubmissionsAndOrbits(
         mpc_directory,
         orbit_fits_directory
     )
@@ -101,7 +101,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             os.makedirs(submission_output_directory, exist_ok = True)
         
         # Create sample times from now to the next submission time
-        propagation_times, num_time_steps = util.getTimeSteps(
+        propagation_times, num_time_steps = adam_util.getTimeSteps(
             submission_time,
             next_submission_time
         )
@@ -119,7 +119,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         # Propagate the best fit orbit for this submission forward in time to the end
         # time, using the propagation sample times from the previous step
         propagation_times = Timestamp.from_mjd(time_steps, scale = "utc")
-        propagated_best_fit_orbit = util.propagateBestFitOrbit(
+        propagated_best_fit_orbit = adam_util.propagateBestFitOrbit(
             submission_orbit,
             propagator,
             propagation_times,
@@ -128,7 +128,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         )
 
         # Generate variants based on the propagated best fit orbit
-        propagated_variants = util.propagateVariants(
+        propagated_variants = adam_util.propagateVariants(
             propagated_best_fit_orbit,
             propagator,
             propagation_times,
