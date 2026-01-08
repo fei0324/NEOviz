@@ -1,12 +1,43 @@
 import numpy as np
 import spiceypy as spice
-
 import matplotlib.pyplot as plt
-import src.plotting as plotting
+
+import tube_generation.plotting as plotting
 
 EPSILON = 1e-4
 
 
+# General functions
+def readFile(filename):
+    """
+    Read the content of a file and return it as a string.
+    Input:
+        filename: The path to the file to read
+    Output:
+        content: The content of the file as a string
+    """
+
+    # Open the file, read it and return its content
+    file = open(filename, 'r')
+    content = file.read()
+    return content
+
+
+def writeFile(filename, content):
+    """
+    Write the given content to a file.
+    Input:
+        filename: The path to the file to write to
+        content: The content to write to the file
+    """
+
+    # Open the file, write the content and close it
+    file = open(filename, "w")
+    file.write(content)
+    file.close()
+
+
+# Math related functions
 def normalizePoints(points):
     """
     Normalize the input points to be between 0 and 1 for each dimention and calculate the
@@ -63,6 +94,7 @@ def invNormalizePoints(normalized_points, offsets, scaling_factors):
     # Return new set of points that are normalized and the scaling factors
     return points
 
+
 def invNormalizePoint(normalized_point, offsets, scaling_factors):
     """
     Inverse normalize the input point from being between 0 and 1 for each dimention
@@ -85,7 +117,6 @@ def invNormalizePoint(normalized_point, offsets, scaling_factors):
     return point
 
 
-# Common math functions
 def projectVectorToPlane(vector, normal):
     """
     Projoect a vector onto a plane.
@@ -292,8 +323,12 @@ def calcPlaneLineIntersection(normal, center, line_start, line_direction):
                     line_start to end up on the plane
         intersection: the coordinate of the intersection
     """
+    
+    # First normalize the input vectors
+    normal = normal / np.linalg.norm(normal)
+    line_direction = line_direction / np.linalg.norm(line_direction)
 
-    # First check if there ever will be an intersection
+    # Check if there ever will be an intersection
     assert np.abs(np.dot(line_direction, normal)) > EPSILON, "No intersection"
     
     # Calculate the multiplier of the line direction to makes the point be on the plane

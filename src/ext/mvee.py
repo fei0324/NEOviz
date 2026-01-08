@@ -15,7 +15,7 @@ from argparse import Namespace
 
 import choldate as chol
 
-from src.settings import *
+from tube_generation.settings import *
 
 
 

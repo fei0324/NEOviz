@@ -14,11 +14,11 @@ from matplotlib.patches import Ellipse
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.pairwise import pairwise_distances
 
-from src.ext.mvee import mvee2
+from ext.mvee import mvee2
 
-import src.util as util
-import src.texture as texture
-import src.plotting as plotting
+import tube_generation.util as util
+import tube_generation.texture as texture
+import tube_generation.plotting as plotting
 
 EPSILON = 1e-4
 
@@ -287,7 +287,7 @@ def getPointsOnSlice(coordinates, velocities, median_velocity, ellipsoid_center,
             plane_variant_intersections,
             color = "red"
         )
-        plotting.plotPlane(figure_axes, ellipsoid_center, median_velocity)
+        #plotting.plotPlane(figure_axes, ellipsoid_center, median_velocity)
         plotting.plotVector3D(figure_axes, ellipsoid_center, median_velocity, "red",)
         plt.title(
             "Plot of original points and the projections on the median velocity plane"
@@ -700,7 +700,7 @@ def calcStatistics(intersection_points, ellipse_rotation):
     """
 
     # Rotate the intersection points, so the ellipse axes are aligned with the x and
-    # y axis
+    # y axis. TODO: Invert the rotation matrix
     rotated_intersection_points = ellipse_rotation.T @ intersection_points
 
     # Standard deviation of the intersection point positions
@@ -814,8 +814,7 @@ def invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors):
     return ellipsoid
 
 
-def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_directory, 
-                  save_textures, texture_resolution, do_plotting):
+def createEllipse(data, time_step, ssb_normal, texture_directory, configuration):
     """
     Create just one ellipse in the tube
 
@@ -830,8 +829,13 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
         ellipse: One ellipse data object for the given timestep
         ellipsoid: One ellipsoid that encapsulated the 3D points for the given timestep
     """
+    # Configuration parameters
+    do_plotting = configuration["do_plotting"]
+    num_ellipse_samples = configuration["num_polygon_samples"]
+    save_textures = configuration["save_textures"]
+    texture_resolution = configuration["texture_resolution"]
 
-    print("\nTime", data.time_data[time_step])
+    print("\nTime", data.times[time_step])
     print("Time step number", time_step)
     
     # Get the variant coordinate list for this timestep. The coordinates are in meters 
@@ -876,7 +880,10 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
     angle = np.arccos(np.dot(mean_velocity_normalized, median_velocity_normalized))
     if angle > np.deg2rad(angle_tolerance):
         is_deviating = int(1)
-        print("\033[41mWarning:\033[0m Mean and median velocities differ by more than the specified angle tolerance")
+        print("\033[41mWarning:\033[0m " \
+            "Mean and median velocities differ by more than the specified angle " \
+            "tolerance"
+        )
         print("Mean velocity:", mean_velocity_normalized)
         print("Median velocity:", median_velocity_normalized)
         print("Angle difference (degrees):", np.rad2deg(angle))
@@ -1034,8 +1041,7 @@ def createEllipse(data, time_step, num_ellipse_samples, ssb_normal, texture_dire
     return ellipse_sample_points, ellipsoid, saved_texture
 
 
-def createEllipses(data, num_ellipse_samples, out_directory, save_textures,
-                   texture_resolution, do_plotting):
+def createEllipses(variants_data, output_directory, configuration):
     """
     Take the input data and create a list of all ellipses that will be the base for the
     tube
@@ -1050,9 +1056,9 @@ def createEllipses(data, num_ellipse_samples, out_directory, save_textures,
     Output:
         A list of all ellipses to create the tube for the input data
     """
-    
+
     # Create a directory to store the textures for each ellipse
-    texture_directory = os.path.join(out_directory, "textures")
+    texture_directory = os.path.join(output_directory, "textures")
     os.makedirs(texture_directory, exist_ok = True)        
 
     # Get the normal of the solar system
@@ -1061,38 +1067,32 @@ def createEllipses(data, num_ellipse_samples, out_directory, save_textures,
     # not affect the overall results
     ssb_normal = util.getSolarSystemNormal(["Jan 1, 2015"])
 
-    # Only process the last 1000 timesteps
-    last_n_timesteps = 400
-    #last_n_timesteps = data.num_time_steps
-
     # Loop over all timesteps
     time_ellipses = []
-    for t in range(data.num_time_steps - last_n_timesteps, data.num_time_steps):
-        # Create one ellipse and ellipsoid for this timestep
-        ellipse_sample_points, ellipsoid, saved_texture = createEllipse(
-            data,
-            t,
-            num_ellipse_samples,
-            ssb_normal,
-            texture_directory,
-            save_textures,
-            texture_resolution,
-            do_plotting
-        )
-        # TODO: Make the number of generated textures configurable and automatically
-        # adjust when it comes to witing the tube file
+    for tube_part in variants_data:
+        for t in range(tube_part.num_time_steps):
+            # Create one ellipse and ellipsoid for this timestep
+            ellipse_sample_points, ellipsoid, saved_texture = createEllipse(
+                tube_part,
+                t,
+                ssb_normal,
+                texture_directory,
+                configuration
+            )
+            # TODO: Make the number of generated textures configurable and automatically
+            # adjust when it comes to witing the tube file
 
-        # Create the TubeEllipse data object for this timestep
-        time_ellipse = TubeEllipse(
-            data.time_data[t],
-            ellipsoid.center,
-            saved_texture,
-            ellipse_sample_points,
-            ellipsoid
-        )
+            # Create the TubeEllipse data object for this timestep
+            time_ellipse = TubeEllipse(
+                tube_part.times[t],
+                ellipsoid.center,
+                saved_texture,
+                ellipse_sample_points,
+                ellipsoid
+            )
 
-        # Store the ellipse and ellipsoid
-        time_ellipses.append(time_ellipse)
+            # Store the ellipse and ellipsoid
+            time_ellipses.append(time_ellipse)
 
     return time_ellipses
     
