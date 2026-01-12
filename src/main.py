@@ -294,7 +294,7 @@ if __name__ == "__main__":
     )
 
     # Create the final tube file
-    tube_filename = "tube_" + object_id + ".json"
+    tube_filename = "tube_" + object_id.replace(" ", "_") + ".json"
     print("Writing tube file", tube_filename)
     tube.writeTube(
         tube_filename,
@@ -304,7 +304,7 @@ if __name__ == "__main__":
     )
 
     # Generate transforms for visualization in OpenSpace
-    transforms_filename = "transforms_" + object_id + ".asset"
+    transforms_filename = "transforms_" + object_id.replace(" ", "_") + ".asset"
     print("Writing transforms file", transforms_filename)
     toTransforms.generateTransforms(
         transforms_filename,
@@ -314,7 +314,7 @@ if __name__ == "__main__":
     )
 
     # Generate ellipsoids for visualization in OpenSpace
-    ellipsoids_filename = "ellipsoids_" + object_id + ".asset"
+    ellipsoids_filename = "ellipsoids_" + object_id.replace(" ", "_") + ".asset"
     print("Writing ellipsoids file", ellipsoids_filename)
     toEllipsoids.generateEllipsoids(
         ellipsoids_filename,

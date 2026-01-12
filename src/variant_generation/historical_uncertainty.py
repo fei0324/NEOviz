@@ -19,6 +19,8 @@ from main import VariantsData
 MAX_THREADS = 8
 CHUNK_SIZE = 16
 
+# The number of meters in one Astronomical Unit (AU)
+AU = 149597870700
 
 def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                      configuration):
@@ -173,17 +175,18 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         ordered_variants_velocities = []
 
         # We only take the coordinate or velocity cooresponding to the t:th timestamp
-        # for each orbit
+        # for each orbit. Also rescale the coordinates from AU to meters and velocities
+        # from AU/s to m/s.
         print("Sorting coordinates and velocities of variants")
         for t in range(num_variant_time_steps):
             # The reference frame used by adam is Ecliptic J2000
             # Positions in AU (.r is the position vector)
             ordered_variants_coordinates.append(
-                propagated_variants.coordinates.r[t::num_variant_time_steps]
+                propagated_variants.coordinates.r[t::num_variant_time_steps] * AU
             )
             # Velocities in AU/day (.v is the velocity vector)
             ordered_variants_velocities.append(
-                propagated_variants.coordinates.v[t::num_variant_time_steps]
+                propagated_variants.coordinates.v[t::num_variant_time_steps] * AU
             )
         print("Finished sorting coordinates and velocities of variants")
 
