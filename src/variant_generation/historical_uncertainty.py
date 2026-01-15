@@ -17,10 +17,11 @@ from main import VariantsData
 
 # TODO: Set this higher when multithreading is supported
 MAX_THREADS = 8
-CHUNK_SIZE = 16
+CHUNK_SIZE = 256 # 128
 
 # The number of meters in one Astronomical Unit (AU)
 AU = 149597870700
+SECONDS_PER_DAY = 86400
 
 def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                      configuration):
@@ -120,19 +121,45 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             end_time
         )
         
-        # Propagate the best fit orbit for this submission forward in time
-        # TODO: Make it posible to save this data to file and load it again so we do not
-        # have to re-run it so often.
-        # TODO: Use more samples for a better covariance matrix estimation
-        num_samples = num_variants 
-        propagated_best_fit_orbit = adam_util.propagateBestFitOrbit(
-            submission_orbit,
-            propagator,
-            propagation_times,
-            num_samples,
-            num_threads = MAX_THREADS,
-            chunk_size = CHUNK_SIZE
+        # Check if there are existing results for this submission
+        parquet_path = os.path.join(
+            submission_output_directory,
+            "propagated_best_fit_orbit_"+ str(num_variants) + ".parquet"
         )
+        parquet_exists = os.path.exists(parquet_path)
+
+        # If the file exist, and we want to use it according to teh configuration, then
+        # use it, even if the configuration override flag is true
+        should_propagate = True
+        if configuration["override_existing_results"] and \
+           configuration["use_existing_best_fit_orbit"] and parquet_exists:
+           should_propagate = False
+        elif not configuration["override_existing_results"] and parquet_exists:
+            should_propagate = False
+
+        # Propagate the best fit orbit for this submission forward in time
+        propagated_best_fit_orbit = None
+        if should_propagate:
+            # TODO: Use more samples for a better covariance matrix estimation
+            propagated_best_fit_orbit = adam_util.propagateBestFitOrbit(
+                submission_orbit,
+                propagator,
+                propagation_times,
+                num_variants,
+                num_threads = MAX_THREADS,
+                chunk_size = CHUNK_SIZE
+            )
+
+            if configuration["save_intermediate_results"]:
+                # Save the propagated best fit orbit to file
+                propagated_best_fit_orbit.to_parquet(parquet_path)
+        else:
+            # Load the stored data
+            print(
+                "Loading existing data for propagated best fit orbit from",
+                parquet_path
+            )
+            propagated_best_fit_orbit = Orbits.from_parquet(parquet_path)
 
         # If high resolution time frame is used, create new propagation times for the
         # variants in that time frame
@@ -176,8 +203,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
 
         # We only take the coordinate or velocity cooresponding to the t:th timestamp
         # for each orbit. Also rescale the coordinates from AU to meters and velocities
-        # from AU/s to m/s.
-        print("Sorting coordinates and velocities of variants")
+        # from AU/day to m/s.
+        print("Sorting and scaling coordinates and velocities of variants")
         for t in range(num_variant_time_steps):
             # The reference frame used by adam is Ecliptic J2000
             # Positions in AU (.r is the position vector)
@@ -186,7 +213,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             )
             # Velocities in AU/day (.v is the velocity vector)
             ordered_variants_velocities.append(
-                propagated_variants.coordinates.v[t::num_variant_time_steps] * AU
+                propagated_variants.coordinates.v[t::num_variant_time_steps] * \
+                AU / SECONDS_PER_DAY
             )
         print("Finished sorting coordinates and velocities of variants")
 
@@ -233,6 +261,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                 submission_output_directory,
                 "variant_kernels"
             )
+            os.makedirs(kernels_output_directory, exist_ok = True)
 
             # Create kernels and save them to file
             kernels.saveKernels(

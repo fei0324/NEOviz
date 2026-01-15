@@ -3,9 +3,12 @@ import numpy as np
 import spiceypy as spice
 import pyarrow.compute as pc
 
-from naif_leapseconds import leapseconds
 from astropy import units
 
+# Path to the SPICE kernel files, to initialize SPICE
+LSK_KERNEL = "../data/kernels/lsk/naif0012.tls.pc"
+SPK_KERNEL = "../data/kernels/spk/de432s.bsp"
+PCK_KERNEL = "../data/kernels/pck/pck00011.tpc"
 
 def create_kernels(propagated_orbits, output_directory, id_offset = 1000000):
     """
@@ -20,7 +23,9 @@ def create_kernels(propagated_orbits, output_directory, id_offset = 1000000):
 
     """
     # Initialize SPICE
-    spice.furnsh(leapseconds)
+    spice.furnsh(LSK_KERNEL)
+    spice.furnsh(SPK_KERNEL)
+    spice.furnsh(PCK_KERNEL)
 
     # Create the output directory
     os.makedirs(output_directory, exist_ok = True)

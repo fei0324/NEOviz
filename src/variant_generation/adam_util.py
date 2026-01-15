@@ -5,6 +5,8 @@ import pandas as pd
 import pyarrow as pa
 import quivr as qv
 
+from quivr.concat import concatenate
+
 from adam_core.time import Timestamp
 from adam_core.orbits import Orbits
 from adam_core.coordinates import CartesianCoordinates
@@ -13,6 +15,9 @@ from adam_core.orbits import VariantOrbits
 # TODO: Set the correct minimum number of timesteps required by the propagator
 MINIMUM_TIMESTEPS = 80
 
+# The propagator is slow and cannot handle too amny samples at the same time (even if it
+# chunks) so we need to perform some additional chunking manually.
+MAX_NUM_VARIANTS_PER_BATCH = 512
 
 # Table to store resulting fitted orbits along with metadata about the result from the
 # fitting process.
@@ -189,18 +194,79 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
     Output:
         propagated_orbit: The propagated best fit orbit with covariance information
     """
-    # Propagate the best fit orbit for a submission forward in time using the propagation
-    # sample times
+
     print("Starting to propagate the best fit orbit")
-    propagated_orbit = propagator.propagate_orbits(
-        best_fit_orbit.to_orbits(), 
-        propagation_times, 
-        covariance = True,
-        covariance_method = "monte-carlo",
-        num_samples = num_samples,
-        max_processes = num_threads,
-        chunk_size = chunk_size
-    )
+    print("number of timesteps:", len(propagation_times))
+    propagated_orbit = None
+    bf_orbit = best_fit_orbit.to_orbits()
+
+    # Do manual batching if the number of samples is too high for the propagator to handle
+    if num_samples > MAX_NUM_VARIANTS_PER_BATCH:
+        print("The number of samples is larger than the maximum allowed per batch")
+        print("Performing manual batching of propagation")
+
+        # Calculate the number of batches needed
+        num_batches = math.ceil(num_samples / MAX_NUM_VARIANTS_PER_BATCH)
+        print("Number of batches:", num_batches)
+
+        # Propagate each batch separately
+        is_first = True
+        for batch_index in range(num_batches):
+            print("Propagating batch", batch_index + 1, "of", num_batches)
+
+            # Calculate the number of samples for this batch
+            start_sample = batch_index * MAX_NUM_VARIANTS_PER_BATCH
+            end_sample = min(start_sample + MAX_NUM_VARIANTS_PER_BATCH, num_samples)
+            batch_num_samples = end_sample - start_sample
+            print("Number of samples in batch:", batch_num_samples)
+
+            # Slice the coordinates of the best fit orbit to only include the samples for
+            # this batch
+            batch_coordinates = bf_orbit.coordinates
+            batch_coordinates.x = bf_orbit.coordinates.x[start_sample:end_sample]
+            batch_coordinates.y = bf_orbit.coordinates.y[start_sample:end_sample]
+            batch_coordinates.z = bf_orbit.coordinates.z[start_sample:end_sample]
+            batch_coordinates.vx = bf_orbit.coordinates.vx[start_sample:end_sample]
+            batch_coordinates.vy = bf_orbit.coordinates.vy[start_sample:end_sample]
+            batch_coordinates.vz = bf_orbit.coordinates.vz[start_sample:end_sample]
+
+            # Propagate the batch
+            propagated_batch = propagator.propagate_orbits(
+                Orbits.from_kwargs(
+                    orbit_id = bf_orbit.orbit_id,
+                    object_id = bf_orbit.object_id,
+                    coordinates = batch_coordinates,
+                ),
+                propagation_times, 
+                covariance = True,
+                covariance_method = "monte-carlo",
+                num_samples = batch_num_samples,
+                max_processes = num_threads,
+                chunk_size = chunk_size
+            )
+            
+            # Append the propagated batch to the full propagated orbit
+            if is_first:
+                propagated_orbit = propagated_batch
+                is_first = False
+            else:
+                propagated_orbit = concatenate([propagated_orbit, propagated_batch])
+
+        print("Finished all batches")
+        
+    else:
+        # Propagate the best fit orbit for a submission forward in time using the propagation
+        # sample times
+        propagated_orbit = propagator.propagate_orbits(
+            best_fit_orbit.to_orbits(), 
+            propagation_times, 
+            covariance = True,
+            covariance_method = "monte-carlo",
+            num_samples = num_samples,
+            max_processes = num_threads,
+            chunk_size = chunk_size
+        )
+        
     print("Finished propagating the best fit orbit")
         
     # Convert the propagated orbit times to UTC
@@ -261,19 +327,64 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     )
 
     # Propagate the variants sample points forward in time to the end time
-    # TODO: Do we need a chunk size? 
     print("Starting to propagate variant samples")
-    propagated_variants = propagator.propagate_orbits(
-        Orbits.from_kwargs(
-            orbit_id = variants.orbit_id,
-            object_id = variants.object_id,
-            coordinates = variants.coordinates,
-        ), 
-        propagation_times,
-        covariance = False,
-        max_processes = num_threads,
-        chunk_size = chunk_size
-    )
+    print("number of timesteps:", len(propagation_times))
+
+    # Do manual batching if the number of variants is too high for the propagator to handle
+    propagated_variants = None
+    if num_variants > MAX_NUM_VARIANTS_PER_BATCH:
+        print("The number of variants is larger than the maximum allowed per batch")
+        print("Performing manual batching of propagation")
+
+        # Calculate the number of batches needed
+        num_batches = math.ceil(num_variants / MAX_NUM_VARIANTS_PER_BATCH)
+        print("Number of batches:", num_batches)
+
+        # Propagate each batch separately
+        is_first = True
+        for batch_index in range(num_batches):
+            print("Propagating batch", batch_index + 1, "of", num_batches)
+
+            # Calculate the number of variants for this batch
+            start_variant = batch_index * MAX_NUM_VARIANTS_PER_BATCH
+            end_variant = min(start_variant + MAX_NUM_VARIANTS_PER_BATCH, num_variants)
+            batch_num_variants = end_variant - start_variant
+            print("Number of variants in batch:", batch_num_variants)
+
+            # Propagate the batch
+            propagated_batch_variants = propagator.propagate_orbits(
+                Orbits.from_kwargs(
+                    orbit_id = variants[start_variant:end_variant].orbit_id,
+                    object_id = variants[start_variant:end_variant].object_id,
+                    coordinates = variants[start_variant:end_variant].coordinates,
+                ), 
+                propagation_times,
+                covariance = False,
+                max_processes = num_threads,
+                chunk_size = chunk_size
+            )
+
+            # Append the propagated batch to the full propagated orbit
+            if is_first:
+                propagated_variants = propagated_batch_variants
+                is_first = False
+            else:
+                propagated_variants = concatenate(
+                    [propagated_variants, propagated_batch_variants]
+                )
+
+    else:
+        propagated_variants = propagator.propagate_orbits(
+            Orbits.from_kwargs(
+                orbit_id = variants.orbit_id,
+                object_id = variants.object_id,
+                coordinates = variants.coordinates,
+            ), 
+            propagation_times,
+            covariance = False,
+            max_processes = num_threads,
+            chunk_size = chunk_size
+        )
     print("Finished propagating variant samples")
 
     # Convert the variants timesteps to UTC

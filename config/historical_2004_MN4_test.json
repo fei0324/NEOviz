@@ -16,15 +16,16 @@
   "high_res_end_time": "2005-12-27T21:00:00.000",
   "high_res_sample_multiplier": 48,
 
-  "num_variants": 10,
+  "num_variants": 1000,
   "num_polygon_samples": 80,
 
   "save_intermediate_results": true,
   "override_existing_results": true,
+  "use_existing_best_fit_orbit": true,
 
   "save_textures": true,
   "texture_resolution": 500,
 
   "save_kernels": true,
-  "do_plotting": false
+  "do_plotting": true
 }

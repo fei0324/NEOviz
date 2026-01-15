@@ -127,6 +127,10 @@ def projectVectorToPlane(vector, normal):
     Output: The input vector projected onto the input plane
     """
     
+    # Normalize the vectors
+    vector = vector / np.linalg.norm(vector)
+    normal = normal / np.linalg.norm(normal)
+
     return vector - (np.dot(vector, normal) / np.dot(normal, normal) * normal)
 
 
@@ -174,13 +178,14 @@ def calcRotationMatrix(vector, target_vector):
 
     Input:
         vector: The vector to rotate
-        target_vector: The target vector to align the input vector with (normalized)
+        target_vector: The target vector to align the input vector with 
     Output: The rotation matrix that rotates the input vector to be aligned with the
             target vector
     """
     
-    # Normalize the input vector
+    # Normalize the input vectors
     vector = vector / np.linalg.norm(vector)
+    target_vector = target_vector / np.linalg.norm(target_vector)
 
     # Find the axis of rotation
     rotation_axis = np.cross(vector, target_vector)
@@ -266,6 +271,9 @@ def invTransformPointsToXYPlane(points, plane_center, plane_normal, do_plotting)
     Output: The transformed points on the input plane in 3D
     """
 
+    # Normalize the vector
+    plane_normal = plane_normal / np.linalg.norm(plane_normal)
+
     # The translation is the same as the plane center vector
     translation = plane_center
 
@@ -342,7 +350,7 @@ def calcPlaneLineIntersection(normal, center, line_start, line_direction):
 
 
 # Space specific functions
-def getSolarSystemNormal(utc_time: list[str]):
+def getSolarSystemNormal(utc_time):
     """
     Get the normal of the solar system.
         utc_time: a timestamp used to compute the transformation matrix between the
@@ -373,5 +381,6 @@ def getSolarSystemNormal(utc_time: list[str]):
     # Get the solar system normal in the GALACTIC reference frame
     ssb_normal = cropped_transform_matrix @ eclip_normal
 
+    # TODO: Why are we not using the transformation matrix? 
     # Return the normalized vector
     return eclip_normal/np.linalg.norm(eclip_normal)

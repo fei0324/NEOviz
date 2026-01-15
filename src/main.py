@@ -22,7 +22,8 @@ SPK_KERNEL = "../data/kernels/spk/de432s.bsp"
 PCK_KERNEL = "../data/kernels/pck/pck00011.tpc"
 
 # The number of meters in one Astronomical Unit (AU)
-AU = 149597870700 
+AU = 149597870700
+SECONDS_PER_DAY = 86400
 
 # Current version of the configuration files
 CONFIGURATION_VERSION = "0.1"
@@ -57,8 +58,7 @@ def loadVariantsData(data_directory, num_variants = -1):
     """
 
     # Extract the variants coordinates and velocities files from the given data 
-    # directory. The positions and velocities are given with respect to the Sun.
-    # TODO: The Sun or SSB?
+    # directory. The positions and velocities are given with respect to the SUN (Not SSB).
     coordinates_filename_start = "variants_coordinates_"
     velocities_filename_start = "variants_velocity_"
     times_filename_start = "times_isot_"
@@ -139,10 +139,10 @@ def loadVariantsData(data_directory, num_variants = -1):
     variants_velocities = np.load(variants_velocities_filepath)
     print("Velocity numpy shape", variants_velocities.shape)
     
-    # Scale the velocity data to be in meters per second (from AU per second)
-    print("Scaling velocities from AU/s to m/s")
+    # Scale the velocity data to be in meters per second (from AU per day)
+    print("Scaling velocities from AU/day to m/s")
     for v in range(variants_velocities.shape[0]):
-        variants_velocities[v] = AU * variants_velocities[v]
+        variants_velocities[v] = AU / SECONDS_PER_DAY * variants_velocities[v]
 
     if num_variants == -1:
         # Get the number of variants from the filename of the loaded file(s)
