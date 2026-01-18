@@ -69,14 +69,13 @@ def createTube(data_dictionary, time_polygons, num_ellipse_samples):
 
     return data_dictionary
 
-def writeTube(tube_filename, out_directory, time_polygons, num_ellipse_samples):
+def writeTube(filename, output_directory, time_polygons, configuration):
     """
     
     """
     
     # Meta data for the whole tube file
     version = [int(0), int(2)]
-    #texture_channels = ["density", "positions", "time-delta"]
     texture_channels = ["Density", "Position", "Time difference", "Time difference range"]
 
     # File meta data and overall tube meta data
@@ -94,10 +93,14 @@ def writeTube(tube_filename, out_directory, time_polygons, num_ellipse_samples):
         data_dictionary["texture-channels"].append(texture_channels[tc])
 
     # Fill the dictionary with the tube data
-    data_dictionary = createTube(data_dictionary, time_polygons, num_ellipse_samples)
+    data_dictionary = createTube(
+        data_dictionary,
+        time_polygons,
+        configuration["num_polygon_samples"]
+    )
 
     # Create the file
-    filepath = os.path.join(out_directory, tube_filename)
+    filepath = os.path.join(output_directory, filename)
 
     # Write the tube information to the JSON file
     with open(filepath, 'w') as fp:

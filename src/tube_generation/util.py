@@ -1,12 +1,47 @@
 import numpy as np
 import spiceypy as spice
-
 import matplotlib.pyplot as plt
+<<<<<<< HEAD:src/util.py
 import plotting as plotting
+=======
+
+import tube_generation.plotting as plotting
+>>>>>>> db78ca619c15f36555f137b37017e6e4c221d08c:src/tube_generation/util.py
 
 EPSILON = 1e-4
 
 
+# General functions
+def readFile(filename):
+    """
+    Read the content of a file and return it as a string.
+    Input:
+        filename: The path to the file to read
+    Output:
+        content: The content of the file as a string
+    """
+
+    # Open the file, read it and return its content
+    file = open(filename, 'r')
+    content = file.read()
+    return content
+
+
+def writeFile(filename, content):
+    """
+    Write the given content to a file.
+    Input:
+        filename: The path to the file to write to
+        content: The content to write to the file
+    """
+
+    # Open the file, write the content and close it
+    file = open(filename, "w")
+    file.write(content)
+    file.close()
+
+
+# Math related functions
 def normalizePoints(points):
     """
     Normalize the input points to be between 0 and 1 for each dimention and calculate the
@@ -63,6 +98,7 @@ def invNormalizePoints(normalized_points, offsets, scaling_factors):
     # Return new set of points that are normalized and the scaling factors
     return points
 
+
 def invNormalizePoint(normalized_point, offsets, scaling_factors):
     """
     Inverse normalize the input point from being between 0 and 1 for each dimention
@@ -85,7 +121,6 @@ def invNormalizePoint(normalized_point, offsets, scaling_factors):
     return point
 
 
-# Common math functions
 def projectVectorToPlane(vector, normal):
     """
     Projoect a vector onto a plane.
@@ -96,6 +131,10 @@ def projectVectorToPlane(vector, normal):
     Output: The input vector projected onto the input plane
     """
     
+    # Normalize the vectors
+    vector = vector / np.linalg.norm(vector)
+    normal = normal / np.linalg.norm(normal)
+
     return vector - (np.dot(vector, normal) / np.dot(normal, normal) * normal)
 
 
@@ -143,13 +182,14 @@ def calcRotationMatrix(vector, target_vector):
 
     Input:
         vector: The vector to rotate
-        target_vector: The target vector to align the input vector with (normalized)
+        target_vector: The target vector to align the input vector with 
     Output: The rotation matrix that rotates the input vector to be aligned with the
             target vector
     """
     
-    # Normalize the input vector
+    # Normalize the input vectors
     vector = vector / np.linalg.norm(vector)
+    target_vector = target_vector / np.linalg.norm(target_vector)
 
     # Find the axis of rotation
     rotation_axis = np.cross(vector, target_vector)
@@ -235,6 +275,9 @@ def invTransformPointsToXYPlane(points, plane_center, plane_normal, do_plotting)
     Output: The transformed points on the input plane in 3D
     """
 
+    # Normalize the vector
+    plane_normal = plane_normal / np.linalg.norm(plane_normal)
+
     # The translation is the same as the plane center vector
     translation = plane_center
 
@@ -292,8 +335,12 @@ def calcPlaneLineIntersection(normal, center, line_start, line_direction):
                     line_start to end up on the plane
         intersection: the coordinate of the intersection
     """
+    
+    # First normalize the input vectors
+    normal = normal / np.linalg.norm(normal)
+    line_direction = line_direction / np.linalg.norm(line_direction)
 
-    # First check if there ever will be an intersection
+    # Check if there ever will be an intersection
     assert np.abs(np.dot(line_direction, normal)) > EPSILON, "No intersection"
     
     # Calculate the multiplier of the line direction to makes the point be on the plane
@@ -307,7 +354,7 @@ def calcPlaneLineIntersection(normal, center, line_start, line_direction):
 
 
 # Space specific functions
-def getSolarSystemNormal(utc_time: list[str]):
+def getSolarSystemNormal(utc_time):
     """
     Get the normal of the solar system.
         utc_time: a timestamp used to compute the transformation matrix between the
@@ -338,6 +385,7 @@ def getSolarSystemNormal(utc_time: list[str]):
     # Get the solar system normal in the GALACTIC reference frame
     ssb_normal = cropped_transform_matrix @ eclip_normal
 
+    # TODO: Why are we not using the transformation matrix? 
     # Return the normalized vector
     return eclip_normal/np.linalg.norm(eclip_normal)
 

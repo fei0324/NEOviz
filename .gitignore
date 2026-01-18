@@ -8,14 +8,8 @@ choldate/
 data/kernels/lsk/
 data/kernels/pck/
 data/kernels/spk/
+data/mpc_data
+data/orbit_fits
 generated_data/
-src/data
-src/orbit_propagation/data/
-src/orbit_propagation/generated_data/
-src/transform/ellipsoids/
-src/transform/hrzData/
-src/transform/jinjaData/
-src/transform/jsonData/
-src/transform/transforms/
 
 Anaconda3-2025.06-0-Linux-x86_64.sh
