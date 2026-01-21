@@ -39,143 +39,10 @@ class VariantsData:
     num_time_steps: int 
 
 
-def loadVariantsData(data_directory, num_variants = -1):
-    """
-    Load the data from the given data directory. The directory must exist and contain the
-    appropiate data files.
-
-    Input:
-        data_directory: The full directory path to the data, should end with '/'
-        num_variants: The number of desired variants, this is used to identify the files
-        to load. If -1 is given, then load the first file that matches the filename
-        format. 
-    Output:
-        Data.variants_coordinates: The coordinates of the variants ordered per timestep
-        Data.variants_velocities: The velocities of the variants ordered per timestep
-        Data.time_data: The timesteps
-        Data.num_variants: The total number of samples
-        Data.num_time_steps: The total number of time steps
-    """
-
-    # Extract the variants coordinates and velocities files from the given data 
-    # directory. The positions and velocities are given with respect to the SUN (Not SSB).
-    coordinates_filename_start = "variants_coordinates_"
-    velocities_filename_start = "variants_velocity_"
-    times_filename_start = "times_isot_"
-
-    # If a specific number of variants is given, then add that to the filename to find
-    # that particular file
-    if num_variants != -1:
-        coordinates_filename_start += str(num_variants)
-        velocities_filename_start += str(num_variants)
-        times_filename_start += str(num_variants)
-
-    # Find the variants data files. There should only be one file per type in the
-    # directory, if there are more than one, then only the first to be found is the one
-    # used. If num_variants is given, then the file with that specific name is used.
-    variants_coordinates_file = ""
-    variants_velocities_file = ""
-    time_file = ""
-    if num_variants != -1:
-        variants_coordinates_file = coordinates_filename_start + ".npy"
-        variants_velocities_file = velocities_filename_start + ".npy"
-        time_file = times_filename_start + ".npy"
-    else:
-        for filename in os.listdir(data_directory):
-            # Variants coordinates file
-            if not variants_coordinates_file and \
-               filename.startswith(coordinates_filename_start):
-                variants_coordinates_file = filename
-                break
-            # Find the variants velocities file
-            if not variants_velocities_file and \
-               filename.startswith(velocities_filename_start):
-                variants_velocities_file = filename
-                break
-            # Get the time file from the directory. All variants use the same timesteps
-            if not time_file and filename.startswith(times_filename_start):
-                time_file = filename
-                break
-
-    # Check if all files were found and if they exist
-    variants_coordinates_filepath = os.path.join(
-        data_directory,
-        variants_coordinates_file
-    )
-    if not os.path.exists(variants_coordinates_filepath):
-        print("Could not find variants coordinates file ", variants_coordinates_filepath)
-        assert False, "Missing variants coordinates file"
-
-    variants_velocities_filepath = os.path.join(data_directory, variants_velocities_file)
-    if not os.path.exists(variants_velocities_filepath):
-        print("Could not find variants velocities file ", variants_velocities_filepath)
-        assert False, "Missing variants velocities file"
-
-    time_filepath = os.path.join(data_directory, time_file)
-    if not os.path.exists(time_filepath):
-        print("Could not find time file ", time_filepath)
-        assert False, "Missing time file"
-
-    # Load the time data
-    print("Loading file", time_file)
-    time_data = np.load(time_filepath)
-
-    # Get the number of time steps
-    num_time_steps = len(time_data)
-    print("Number of time steps", num_time_steps)
-
-    # Load the coordinate data
-    print("Loading file", variants_coordinates_file)
-    variants_coordinates = np.load(variants_coordinates_filepath)
-    print("Coordinate numpy shape", variants_coordinates.shape)
-
-    # Scale the coordinate data to be in meters (from AU)
-    print("Scaling coordinates from AU to meters")
-    for v in range(variants_coordinates.shape[0]):
-        variants_coordinates[v] = AU * variants_coordinates[v]
-
-    # Load the velocity data
-    print("Loading file", variants_velocities_file)
-    variants_velocities = np.load(variants_velocities_filepath)
-    print("Velocity numpy shape", variants_velocities.shape)
-    
-    # Scale the velocity data to be in meters per second (from AU per day)
-    print("Scaling velocities from AU/day to m/s")
-    for v in range(variants_velocities.shape[0]):
-        variants_velocities[v] = AU / SECONDS_PER_DAY * variants_velocities[v]
-
-    if num_variants == -1:
-        # Get the number of variants from the filename of the loaded file(s)
-        # Examplefilename: variants_coordinates_10000.npy -> 10000.npy -> 10 000 samples
-        num_variants = int(variants_coordinates_file.split("_")[-1].split(".")[0])
-    print("Number of variants", num_variants)
-    
-    # The coordinates and velocities in the files are orderd per orbit, but we want to
-    # find all varaint cooridnates and velocities per timestep to create time-slices
-    ordered_variants_coordinates = []
-    ordered_variants_velocities = []
-    for t in range(num_time_steps):
-        # We only take the coordinate or velocity cooresponding to the t:th timestamp
-        # for each orbit
-        ordered_variants_coordinates.append(variants_coordinates[t::num_time_steps])
-        ordered_variants_velocities.append(variants_velocities[t::num_time_steps])
-
-    print("Size of ordered_variants_coordinates", len(ordered_variants_coordinates))
-    print("Size of first item", len(ordered_variants_coordinates[0]))
-    print("Shape of first item", ordered_variants_coordinates[0].shape)
-    
-    variants_data = []
-    variants_data.append(VariantsData(
-        ordered_variants_coordinates,
-        ordered_variants_velocities,
-        time_data,
-        num_variants,
-        num_time_steps
-    ))
-    return variants_data
-
-
 if __name__ == "__main__":
+    """
+    """
+
     # Set the working directory
     root = rootutils.setup_root(
         __file__,
@@ -191,7 +58,9 @@ if __name__ == "__main__":
     spice.furnsh(PCK_KERNEL)
 
     # Get the input configuration file that contain all settings and parameters
-    configuration_file = "../config/historical_2004_MN4_test.json"
+    #configuration_file = "../config/historical_2004_MN4_test.json"
+    #configuration_file = "../config/sectioned_2012_DA14_test.json"
+    configuration_file = "../config/historical_2023_CX1_test.json"
     configuration_data = None
 
     # Try to read the configuration json file
@@ -252,38 +121,30 @@ if __name__ == "__main__":
     generated_variants_directory = os.path.join(generated_variants_directory, object_id)
     tube_directory = os.path.join(tube_directory, object_id)
 
-    # Check if there are existing variants in the output directory
-    has_existing_variants = True
-    if len(os.listdir(generated_variants_directory)) == 0:
-        # TODO: Make this check more robust by checking for specific files
-        has_existing_variants = False
+    os.makedirs(generated_variants_directory, exist_ok = True)
+    os.makedirs(tube_directory, exist_ok = True)
 
     # Run the variant generation
     variants_data = None
-    if override_existing_results or has_existing_variants == False:
-        if tube_type == "historical":
-            print("Generating historical uncertainty variants for", object_id)
-            variants_data = historical_uncertainty.generateVariants(
-                mpc_directory,
-                orbit_fits_directory,
-                generated_variants_directory,
-                configuration_data
-            )
-        elif tube_type == "sectioned":
-            print("Generating sectioned uncertainty variants for", object_id)
-            variants_data = sectioned_uncertainty.generateVariants(
-                mpc_directory,
-                orbit_fits_directory,
-                generated_variants_directory,
-                configuration_data
-            )
-        else:
-            assert False, "Unknown tube type: " + tube_type
-    # Or load existing variants data from file
+    if tube_type == "historical":
+        print("Generating historical uncertainty variants for", object_id)
+        variants_data = historical_uncertainty.generateVariants(
+            mpc_directory,
+            orbit_fits_directory,
+            generated_variants_directory,
+            configuration_data
+        )
+    elif tube_type == "sectioned":
+        print("Generating sectioned uncertainty variants for", object_id)
+        variants_data = sectioned_uncertainty.generateVariants(
+            mpc_directory,
+            orbit_fits_directory,
+            generated_variants_directory,
+            configuration_data
+        )
     else:
-        print("Loading existing variants from", generated_variants_directory)
-        variants_data = loadVariantsData(generated_variants_directory)
-
+        assert False, "Unknown tube type: " + tube_type
+    
     # Run the polygon generation
     # TODO: Only do this if there already isnt a tube file in the output directory
     print("Generating tube ellipses for", object_id)

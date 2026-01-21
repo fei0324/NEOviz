@@ -18,7 +18,7 @@ def plotPoint3D(axes, point, size = 10, color = "blue", alpha = 1.0, marker = 'o
         edgecolor: The edge color of the point to plot
         is_normalized: Whether the point is normalized between 0 and 1 or not
     """
-
+    
     # Plot the point onto the figure
     points = np.zeros((3, 1))
     points[0, :] = point[0]

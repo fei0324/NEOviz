@@ -1,0 +1,26 @@
+{
+  "version": "0.1",
+
+  "object_id": "2012 DA14",
+  "input_directory": "../data",
+  "output_directory": "../generated_data",
+  "start_time": "2012-02-23T00:00:00.000",
+  "end_time": "2013-12-01T00:00:00.000",
+
+  "tube_type": "sectioned",
+  "gap_percentage": 5.0,
+
+  "num_variants": 1000,
+  "num_polygon_samples": 80,
+
+  "save_intermediate_results": true,
+  "override_existing_results": true,
+  "use_existing_best_fit_orbit": true,
+  "use_existing_variants": true,
+
+  "save_textures": true,
+  "texture_resolution": 500,
+
+  "save_kernels": false,
+  "do_plotting": false
+}

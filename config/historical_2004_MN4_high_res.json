@@ -27,3 +27,7 @@
   "save_kernels": true,
   "do_plotting": true
 }
+
+"high_res_start_time": "2005-12-01T21:00:00.000",
+  "high_res_end_time": "2005-12-27T21:00:00.000",
+  "end_time": "2005-12-27T21:00:00.000",

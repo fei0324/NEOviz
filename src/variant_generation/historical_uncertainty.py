@@ -13,15 +13,14 @@ from adam_assist import ASSISTPropagator
 
 import variant_generation.adam_util as adam_util
 import variant_generation.kernels as kernels
-from main import VariantsData
 
-# TODO: Set this higher when multithreading is supported
+# Settings for chunking the propagation
 MAX_THREADS = 8
 CHUNK_SIZE = 256 # 128
 
 # The number of meters in one Astronomical Unit (AU)
-AU = 149597870700
-SECONDS_PER_DAY = 86400
+AU = 149597870700.0
+SECONDS_PER_DAY = 86400.0
 
 def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                      configuration):
@@ -58,8 +57,11 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
     num_variants = configuration["num_variants"]
 
     use_high_res_timeframe = configuration["use_high_res_timeframe"]
-    high_res_start_time = Time(configuration["high_res_start_time"], format = "isot") 
-    high_res_end_time = Time(configuration["high_res_end_time"])
+    high_res_start_time = None
+    high_res_end_time = None
+    if use_high_res_timeframe:
+        high_res_start_time = Time(configuration["high_res_start_time"], format = "isot") 
+        high_res_end_time = Time(configuration["high_res_end_time"])
     
     # Load the submission and best fit orbit data
     submissions, submission_orbits = adam_util.loadSubmissionsAndOrbits(
@@ -87,8 +89,9 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         submission_time = submission_times[submission_number]
         submission_time_str = str(submission_time)[:23]
         submission_time_str = submission_time_str.replace(":", ".")
-        print("Processing submission", submission_number, "at time", submission_time_str)
-
+        print("\nProcessing submission", submission_number, "at time",
+            submission_time_str)
+        
         # Check the submission time
         if submission_time < start_time:
             # If the time is before the start time, continue to the next submission.
@@ -107,13 +110,11 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
 
         # Create a new data folder in the output directory for this submission,
         # if requested
-        submission_output_directory = None
-        if configuration["save_intermediate_results"]:
-            submission_output_directory = os.path.join(
-                output_directory,
-                submission_time_str
-            )
-            os.makedirs(submission_output_directory, exist_ok = True)
+        submission_output_directory = os.path.join(
+            output_directory,
+            submission_time_str
+        )
+        os.makedirs(submission_output_directory, exist_ok = True)
 
         # Create sample times from now to the end time
         propagation_times, num_time_steps = adam_util.getTimeSteps(
@@ -128,7 +129,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         )
         parquet_exists = os.path.exists(parquet_path)
 
-        # If the file exist, and we want to use it according to teh configuration, then
+        # If the file exist, and we want to use it according to the configuration, then
         # use it, even if the configuration override flag is true
         should_propagate = True
         if configuration["override_existing_results"] and \
@@ -152,6 +153,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
 
             if configuration["save_intermediate_results"]:
                 # Save the propagated best fit orbit to file
+                print("Saving propagated best fit orbit to", parquet_path)
                 propagated_best_fit_orbit.to_parquet(parquet_path)
         else:
             # Load the stored data
@@ -161,8 +163,40 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             )
             propagated_best_fit_orbit = Orbits.from_parquet(parquet_path)
 
+        # Check if there are existing variants in the output directory
+        has_existing_variants_data = adam_util.hasVariantsData(
+            submission_output_directory,
+            num_variants
+        )
+
+        # If the files exist, and we want to use them according to the configuration, then
+        # use them, even if the configuration override flag is true
+        should_generate_variants = True
+        if configuration["override_existing_results"] and \
+           configuration["use_existing_variants"] and has_existing_variants_data:
+           should_generate_variants = False
+        elif not configuration["override_existing_results"] and \
+            has_existing_variants_data:
+            should_generate_variants = False
+
+        # Use existing data instead of generating a new if possible
+        if not should_generate_variants:
+            print("Loading existing variants from", submission_output_directory)
+            variant_data = adam_util.loadVariantsData(
+                submission_output_directory,
+                propagated_best_fit_orbit,
+                num_variants
+            )
+            variants_data.append(variant_data)
+            continue
+
         # If high resolution time frame is used, create new propagation times for the
-        # variants in that time frame
+        # variants in that time frame.
+        # NOTE: If previous variants exist, and are being used, then if the high res
+        # timeframe is different from before (when the variants were generated and stored)
+        # it will use the old timesteps. A rerun is only triggered when the
+        # override_existing_results flag is set to True (while use_existing_variants is
+        # False). Or if the number of variants is different than before.
         start_index = 0
         num_variant_time_steps = num_time_steps
         variant_propagation_times = propagation_times
@@ -196,70 +230,26 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             CHUNK_SIZE
         )
 
-        # The coordinates and velocities are orderd per orbit, but we want to find
-        # all varaint coordinates and velocities per timestep to create time-slices
-        ordered_variants_coordinates = []
-        ordered_variants_velocities = []
-
-        # We only take the coordinate or velocity cooresponding to the t:th timestamp
-        # for each orbit. Also rescale the coordinates from AU to meters and velocities
-        # from AU/day to m/s.
-        print("Sorting and scaling coordinates and velocities of variants")
-        for t in range(num_variant_time_steps):
-            # The reference frame used by adam is Ecliptic J2000
-            # Positions in AU (.r is the position vector)
-            ordered_variants_coordinates.append(
-                propagated_variants.coordinates.r[t::num_variant_time_steps] * AU
-            )
-            # Velocities in AU/day (.v is the velocity vector)
-            ordered_variants_velocities.append(
-                propagated_variants.coordinates.v[t::num_variant_time_steps] * \
-                AU / SECONDS_PER_DAY
-            )
-        print("Finished sorting coordinates and velocities of variants")
-
-        # Create a numpy array from the list of timesteps for the variants
-        times_isot = propagated_variants.coordinates.time.to_astropy().isot
-
-        # Do the same with the covariance matricies. This is a 6x6 matrix for each
-        # timestep of the best fitted orbit with the covariance for position and
-        # velocity.
-        # TODO: Remember that the timesteps for the propagated_best_fit_orbit (i.e the
-        # covariance matricies) is not the same as the variants. Can we generate new
-        # covariance matricies for the high resolution timeframe? Then we have a finer
-        # resolution for the covariance matricies.
-        covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
-
-        # Store the generated data in a data object
-        variant_data = VariantsData(
-            ordered_variants_coordinates,
-            ordered_variants_velocities,
-            times_isot,
-            covariances,
-            num_variants,
-            num_variant_time_steps
-        )
-        variants_data.append(variant_data)
+        # Prosess the propagated variants to get ordered arrays of coordinates,
+        # velocities, and times
+        ordered_variants_coordinates, \
+        ordered_variants_velocities, \
+        times_isot = adam_util.processVariants(propagated_variants, num_time_steps)
 
         # Save variants data to file, if requested
         if configuration["save_intermediate_results"]:
-            # NOTE: The VariantsData object expect the order of the variant coordinates
-            # and velocities to already be sorted per timestep. However, to keep
-            # backwards compatibility with previous variant files, we save the variants
-            # to file in the original order
-            adam_util.saveVariantsToFile(
-                propagated_variants,
-                times_isot,
-                covariances,
-                num_variants,
-                submission_output_directory
+            variants_filepath = os.path.join(
+                submission_output_directory,
+                "propagated_variants_" + str(num_variants) + ".parquet"
             )
+            print("Saving propagated variants to", variants_filepath)
+            propagated_variants.to_parquet(variants_filepath)
 
         # Create SPICE kernels for each variant, if requested
         if configuration["save_kernels"]:
             kernels_output_directory = os.path.join(
                 submission_output_directory,
-                "variant_kernels"
+                "variant_kernels_" + str(num_variants)
             )
             os.makedirs(kernels_output_directory, exist_ok = True)
 
@@ -270,6 +260,25 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                 kernels_output_directory,
                 configuration
             )
+
+        # TODO: Fix this
+        # Recompute covariances of propagated variants, collapse the variants into a
+        # single orbit to get one covariance matrix per timestep. Do this last as it will
+        # change the variants data structure
+        #propagated_variants.collapse(propagated_best_fit_orbit)
+        #covariances = propagated_variants.coordinates.covariance.to_matrix()
+        covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+
+        # Store the generated data in a data object
+        variant_data = adam_util.VariantsData(
+            ordered_variants_coordinates,
+            ordered_variants_velocities,
+            times_isot,
+            covariances,
+            num_variants,
+            num_variant_time_steps
+        )
+        variants_data.append(variant_data)
              
     return variants_data
 

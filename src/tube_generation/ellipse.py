@@ -26,28 +26,28 @@ EPSILON = 1e-4
 # An ellipsoid data object from MVEE and other parameters
 @dataclass
 class Ellipsoid:
-    ellipsoid_matrix: list
-    center: list
-    axes: list
-    axes_lengths: list
-    rotation_matrix: list
+    ellipsoid_matrix: np.array
+    center: np.array
+    axes: np.array
+    axes_lengths: np.array
+    rotation_matrix: np.array
 
 # An data object for each sample that will be written in the tube file
 @dataclass
 class EllipseSamplePoint:
-    position_2D: list
-    position_3D: list
-    texture_coordinate: list
+    position_2D: np.array
+    position_3D: np.array
+    texture_coordinate: np.array
     density: float
-    standard_deviation: list
-    variance: list
+    standard_deviation: np.array
+    variance: np.array
     is_deviating: int
 
 # Data object for the full ellipse that will be written in the tube file
 @dataclass
 class TubeEllipse:
     time: str
-    center: list
+    center: np.array
     texture: str
     samples: list
     ellipsoid: Ellipsoid

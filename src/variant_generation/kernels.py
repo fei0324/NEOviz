@@ -103,7 +103,18 @@ def create_kernels(propagated_orbits, output_directory, id_offset = 1000000):
 
 def saveKernels(propagated_variants, num_variants, output_directory, configuration):
     """
+    Save SPICE kernels for the given propagated variants in the given output directory.
+    If there already are kernels in the output directory, and the configuration allows
+    overriding existing results, the existing kernels will be removed before creating
+    new ones.
+
+    Input:
+        propagated_variants: The propagated variants to create SPICE kernels for
+        num_variants: The number of propagated variants
+        output_directory: The directory to save the kernels in
+        configuration: The configuration
     """
+
     # Check if there already are kernels
     has_existing_kernels = False
     if len(os.listdir(output_directory)) > 0:

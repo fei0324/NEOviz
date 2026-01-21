@@ -6,7 +6,7 @@ import pyarrow as pa
 import quivr as qv
 
 from quivr.concat import concatenate
-
+from dataclasses import dataclass
 from adam_core.time import Timestamp
 from adam_core.orbits import Orbits
 from adam_core.coordinates import CartesianCoordinates
@@ -18,6 +18,20 @@ MINIMUM_TIMESTEPS = 80
 # The propagator is slow and cannot handle too amny samples at the same time (even if it
 # chunks) so we need to perform some additional chunking manually.
 MAX_NUM_VARIANTS_PER_BATCH = 512
+
+# The number of meters in one Astronomical Unit (AU)
+AU = 149597870700.0
+SECONDS_PER_DAY = 86400.0
+
+# Data object to hold variants data
+@dataclass
+class VariantsData:
+    variants_coordinates: np.array
+    variants_velocities: np.array
+    times: np.array
+    covariances: np.array
+    num_variants: int
+    num_time_steps: int 
 
 # Table to store resulting fitted orbits along with metadata about the result from the
 # fitting process.
@@ -196,7 +210,6 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
     """
 
     print("Starting to propagate the best fit orbit")
-    print("number of timesteps:", len(propagation_times))
     propagated_orbit = None
     bf_orbit = best_fit_orbit.to_orbits()
 
@@ -328,9 +341,9 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
 
     # Propagate the variants sample points forward in time to the end time
     print("Starting to propagate variant samples")
-    print("number of timesteps:", len(propagation_times))
 
-    # Do manual batching if the number of variants is too high for the propagator to handle
+    # Do manual batching if the number of variants is too high for the propagator
+    # to handle
     propagated_variants = None
     if num_variants > MAX_NUM_VARIANTS_PER_BATCH:
         print("The number of variants is larger than the maximum allowed per batch")
@@ -359,7 +372,7 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
                     coordinates = variants[start_variant:end_variant].coordinates,
                 ), 
                 propagation_times,
-                covariance = False,
+                covariance = True,
                 max_processes = num_threads,
                 chunk_size = chunk_size
             )
@@ -388,7 +401,7 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     print("Finished propagating variant samples")
 
     # Convert the variants timesteps to UTC
-    print("Rescaling time to UTC")
+    print("Rescaling times to UTC")
     propagated_variants = propagated_variants.set_column(
         "coordinates.time",
         propagated_variants.coordinates.time.rescale("utc")
@@ -398,40 +411,97 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     return propagated_variants
 
 
-def saveVariantsToFile(propagated_variants, times, covariances, num_variants,
-                       output_directory):
+def processVariants(propagated_variants, num_time_steps):
     """
-    Save the propagated variants data to files in the given output directory.
-    Input:
-        propagated_variants: The propagated variants to save
-        times: The time steps used for the variant propagation
-        covariances: The covariance matricies for the best fit orbit used to generate the
-                     variants
-        num_variants: The number of variants
-        output_directory: The directory to save the files to
+    
     """
-    # Coordinates in AU, reference frame Ecliptic 2000 (.r is the position vector)
-    print("Saving propagated variants data to files")
-    variants_coordinates_filepath = os.path.join(
-        output_directory,
-        "variants_coordinates_" + str(num_variants)
-    )
-    np.save(variants_coordinates_filepath, propagated_variants.coordinates.r)
 
-    # Velocities in AU/day (.v is the velocity vector)
-    variants_velocity_filepath = os.path.join(
-        output_directory,
-        "variants_velocity_" + str(num_variants)
-    )
-    np.save(variants_velocity_filepath, propagated_variants.coordinates.v)
+    # The coordinates and velocities are orderd per orbit, but we want to find
+    # all varaint coordinates and velocities per timestep to create time-slices
+    ordered_variants_coordinates = []
+    ordered_variants_velocities = []
 
-    # Times
-    times_filepath = os.path.join(output_directory, "times_isot_" + str(num_variants))
-    np.save(times_filepath, times)
+    # We only take the coordinate or velocity cooresponding to the t:th timestamp
+    # for each orbit. Also rescale the coordinates from AU to meters and velocities
+    # from AU/day to m/s.
+    print("Processing variants")
+    for t in range(num_time_steps):
+        # The reference frame used by adam is Ecliptic J2000
+        # Positions in AU (.r is the position vector)
+        ordered_variants_coordinates.append(
+            propagated_variants.coordinates.r[t::num_time_steps] * AU
+        )
+        # Velocities in AU/day (.v is the velocity vector)
+        ordered_variants_velocities.append(
+            propagated_variants.coordinates.v[t::num_time_steps] * AU / SECONDS_PER_DAY
+        )
 
-    # Covariance matricies
-    covariances_filepath = os.path.join(
-        output_directory,
-        "covariances_ " + str(num_variants)
+    # Create a numpy array from the list of timesteps for the variants
+    times_isot = propagated_variants.coordinates.time.to_astropy().isot
+
+    print("Finished processing variants")
+    return \
+        ordered_variants_coordinates, \
+        ordered_variants_velocities, \
+        times_isot
+
+
+def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants):
+    """
+    
+    """
+
+    # Construct the full filepath to the paraquet file
+    parquet_path = os.path.join(
+        data_directory,
+        "propagated_variants_" + str(num_variants) + ".parquet"
     )
-    np.save(covariances_filepath, covariances)
+
+    # Load the paraquet file
+    print("Loading propagated variants", parquet_path)
+    propagated_variants = Orbits.from_parquet(parquet_path)
+
+    # Get the number of time steps
+    times_isot = propagated_variants.coordinates.time.to_astropy().isot
+    num_time_steps = len(times_isot) / num_variants
+    num_time_steps = int(num_time_steps)
+    print("Number of time steps", num_time_steps)
+
+    # Process the variants
+    ordered_variants_coordinates, \
+    ordered_variants_velocities, \
+    times_isot = processVariants(propagated_variants, num_time_steps)
+
+    # TODO: Fix this
+    # Recompute covariances of propagated variants, collapse the variants into a
+    # single orbit to get one covariance matrix per timestep. Do this last as it will
+    # change the variants data structure
+    #propagated_variants.collapse(propagated_best_fit_orbit)
+    #covariances = propagated_variants.coordinates.covariance.to_matrix()
+    covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+
+    # Store in the dataobject 
+    return VariantsData(
+        ordered_variants_coordinates,
+        ordered_variants_velocities,
+        times_isot,
+        covariances,
+        num_variants,
+        num_time_steps
+    )
+
+
+def hasVariantsData(data_directory, num_variants):
+    """
+    
+    """
+
+    # Specify the filename that should be present in the directory if the data is present
+    parquet_filename = "propagated_variants_" + str(num_variants) + ".parquet"
+
+    # Search for the files in the given directory
+    for filename in os.listdir(data_directory):
+        if filename == parquet_filename:
+            return True
+
+    return False

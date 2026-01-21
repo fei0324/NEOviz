@@ -1,26 +1,24 @@
 {
   "version": "0.1",
 
-  "object_id": "2004 MN4",
+  "object_id": "2023 CX1",
   "input_directory": "../data",
   "output_directory": "../generated_data",
-  "start_time": "2004-12-27T21:00:00.000",
-  "end_time": "2029-12-31T00:00:00.000",
+  "start_time": "2023-02-13T02:38:00.000",
+  "end_time": "2023-02-13T03:40:00.000",
 
   "tube_type": "historical",
-  "time_of_historical_interest": "2004-12-28T00:00:00.000",
+  "time_of_historical_interest": "2023-02-13T02:39:00.000",
 
-  "use_high_res_timeframe": true,
-  "high_res_start_time": "2029-03-13T00:00:00.000",
-  "high_res_end_time": "2029-05-13T00:00:00.000",
-  "high_res_sample_multiplier": 48,
+  "use_high_res_timeframe": false,
 
-  "num_variants": 10000,
+  "num_variants": 1000,
   "num_polygon_samples": 80,
 
   "save_intermediate_results": true,
   "override_existing_results": true,
   "use_existing_best_fit_orbit": true,
+  "use_existing_variants": true,
 
   "save_textures": true,
   "texture_resolution": 500,
