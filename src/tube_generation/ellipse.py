@@ -41,6 +41,7 @@ class EllipseSamplePoint:
     density: float
     standard_deviation: np.array
     variance: np.array
+    is_gaussian: int
     is_deviating: int
 
 # Data object for the full ellipse that will be written in the tube file
@@ -711,7 +712,15 @@ def calcStatistics(intersection_points, ellipse_rotation):
     variance = np.var(rotated_intersection_points, axis = 1, dtype = np.float64)
     print("Variance:", variance)
 
-    return standard_deviation, variance
+    # Check if the points are in a gaussian distribution or not
+    is_gaussian = util.isGaussian(intersection_points)
+    print("Is Gaussian:", is_gaussian)
+    if is_gaussian:
+        is_gaussian = int(1)
+    else:
+        is_gaussian = int(0)
+
+    return standard_deviation, variance, is_gaussian
 
 
 def checkForOutliers(intersection_points, ellipse_range_x, ellipse_range_y):
@@ -946,7 +955,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
 
     # Calculate standard deviation and variance of the intersection points along the
     # ellipse axes
-    standard_deviation, variance = calcStatistics(
+    standard_deviation, variance, is_gaussian = calcStatistics(
         intersections_2D,
         ellipse.rotation_matrix
     )
@@ -1034,6 +1043,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
             densities[sample],
             standard_deviation,
             variance,
+            is_gaussian,
             is_deviating
         ))
 

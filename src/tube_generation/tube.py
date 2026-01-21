@@ -59,6 +59,7 @@ def createTube(data_dictionary, time_polygons, num_ellipse_samples):
                     "standard-deviation-minor": time_polygon.samples[p].standard_deviation[1],
                     "variance-major": time_polygon.samples[p].variance[0],
                     "variance-minor": time_polygon.samples[p].variance[1],
+                    "is-gaussian": time_polygon.samples[p].is_gaussian,
                     "is-deviating": time_polygon.samples[p].is_deviating
                 }
             })

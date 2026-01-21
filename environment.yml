@@ -235,6 +235,7 @@ dependencies:
       - pandas==2.2.2
       - pbs-installer==2025.2.12
       - pdm==2.22.3
+      - pingouin==0.5.5
       - pip==25.0.1
       - pipdeptree==2.25.1
       - platformdirs==4.3.6
