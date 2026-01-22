@@ -15,9 +15,9 @@ local EllipsoidRotation = {
     ["{{ keyframe.time }}"] = {
       Type = "StaticRotation",
       Rotation = {
-        {{ keyframe.x1 }}, {{ keyframe.y1 }}, {{ keyframe.z1 }},
-        {{ keyframe.x2 }}, {{ keyframe.y2 }}, {{ keyframe.z2 }},
-        {{ keyframe.x3 }}, {{ keyframe.y3 }}, {{ keyframe.z3 }}
+        {{ keyframe.x1 }}, {{ keyframe.x2 }}, {{ keyframe.x3 }},
+        {{ keyframe.y1 }}, {{ keyframe.y2 }}, {{ keyframe.y3 }},
+        {{ keyframe.z1 }}, {{ keyframe.z2 }}, {{ keyframe.z3 }}
       }
     }, {% endfor %}
   }

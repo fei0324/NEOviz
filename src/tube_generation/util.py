@@ -81,7 +81,8 @@ def invNormalizePoints(normalized_points, offsets, scaling_factors):
     Input:
         normalized_points: The points to inverse normalize
         offset: The offset for each dimension (minimum value)
-        scaling_factors: The scaling factor for each dimension (maximum value - minimum value)
+        scaling_factors: The scaling factor for each dimension
+                         (maximum value - minimum value)
     Output:
         points: The inverse normalized points
     """

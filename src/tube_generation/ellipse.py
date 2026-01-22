@@ -6,13 +6,14 @@ import numpy.typing as npt
 import spiceypy as spice
 from astropy import units as astrounit
 from dataclasses import dataclass
-
 import matplotlib.pyplot as plt
 import matplotlib.image as pltimg
-from matplotlib.patches import Ellipse
 
+from matplotlib.patches import Ellipse
+from adam_core.coordinates.covariances import make_positive_semidefinite
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.metrics.pairwise import pairwise_distances
+from copy import deepcopy
 
 from ext.mvee import mvee2
 
@@ -21,6 +22,7 @@ import tube_generation.texture as texture
 import tube_generation.plotting as plotting
 
 EPSILON = 1e-4
+AU = 149597870700.0
 
 # Data types to hold information
 # An ellipsoid data object from MVEE and other parameters
@@ -217,6 +219,144 @@ def createEllipsoid(points, do_plotting, is_3d = True):
                 center,
                 axes_lengths,
                 rotation_matrix
+            )
+            plt.title("Plot of the ellipse and the points it encases")
+            plt.show()
+
+    return Ellipsoid(
+        ellipsoid_matrix,
+        center, 
+        axes,
+        axes_lengths,
+        rotation_matrix 
+    )
+
+ 
+def createEllipsoidFromMatrix(points, ellipsoid_matrix, do_plotting, is_3d = True):
+    """
+    Create an ellipsoid from a given ellipsoid matrix. This function also work for
+    2D input and will then instead create an ellipse from the matrix.
+
+    Input: 
+        points: The input point cloud in 3D (or 2D)
+        ellipsoid_matrix: The matrix representation of the ellipsoid (or ellipse in 2D)
+        do_plotting: Whether debug plots should be made or not
+        is_3d: Whether the inout data is in 3D or 2D
+    Output:
+        Ellipsoid:
+            ellipsoid_matrix: The matrix that representa this ellipsoid (or ellipse in
+                              case of 2D data)
+            center: The center point of the ellipsoid
+            axes: The normalized vectors that represent the directions of the axes of the 
+                  ellipsoid
+            axes_lengths: The lengths of the axes of the ellipsoid
+            rotation_matrix: The rotation matrix of the ellipsoid
+    """
+
+    # Slice the ellipsoid matrix so we only work with the positional uncertainty
+    #ellipsoid_matrix = make_positive_semidefinite(ellipsoid_matrix)
+    ellipsoid_matrix = ellipsoid_matrix[:3, :3]
+    
+    # Compute a minimum encasing ellipsoid for the points using mvee. Use this only to
+    # estimate the center of the ellipoid
+    center = np.mean(points, axis = 1)
+    print("Center", center)
+    
+    # Get the ellipsoid shape characteristics
+    axes, axes_lengths, rotation_matrix = calcEllipsoidParameters(ellipsoid_matrix)
+
+    # Rescale the axes to be in meters and not AU
+    axes_lengths = axes_lengths * AU
+    
+    # Plot the points together with the generated ellipsoid
+    if do_plotting:
+        if is_3d:
+            print("3D ellipsoid axes", axes)
+            print("3D ellipsoid axes lengths", axes_lengths)
+            print("3D ellipsoid rotation", rotation_matrix)
+
+            # Plot the original points and the ellipsoid axes. Red should be the largest
+            # axis and blue should be the smallest axis
+            figure = plt.figure(figsize = plt.figaspect(1))
+            figure_axes = figure.add_subplot(projection = '3d')
+            plotting.plotPoints3D(figure_axes, points, alpha = 0.6, is_normalized = False)
+            plotting.plotPoint3D(
+                figure_axes,
+                center,
+                250,
+                "red",
+                1.0,
+                'x',
+                is_normalized = False
+            )
+            plotting.plotAxes3D(figure_axes, center, axes, is_normalized = False)
+            plt.title("Plot of ellipsoid points and the 3 axes")
+            plt.show()
+
+            # Plot the original points and the ellipsoid as a transparent 3D shape
+            figure.clear()
+            figure = plt.figure(figsize = plt.figaspect(1))
+            figure_axes = figure.add_subplot(projection = '3d')
+            plotting.plotPoints3D(figure_axes, points, alpha = 0.6, is_normalized = False)
+            plotting.plotPoint3D(
+                figure_axes,
+                center,
+                250,
+                "red",
+                1.0,
+                'x',
+                is_normalized = False
+            )
+            plotting.plotEllipsoid(
+                figure_axes,
+                center,
+                axes_lengths,
+                rotation_matrix,
+                is_normalized = False
+            )
+            plt.title("Plot of the ellipsoid and the points it encases")
+            plt.show()
+        else:
+            print("2D ellipse axes", axes)
+            print("2D ellipse axes lengths", axes_lengths)
+            print("2D ellipse rotation", rotation_matrix)
+
+            # Plot the points and the ellipse axes in 2D. Red should be the largest axis
+            # and blue should be the smallest axis
+            figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+            plotting.plotPoints2D(figure_axes, points, alpha = 0.6, is_normalized = False)
+            plotting.plotPoint2D(
+                figure_axes,
+                center,
+                250,
+                "red",
+                1.0,
+                'x',
+                is_normalized = False
+            )
+            plotting.plotAxes2D(figure_axes, center, axes, is_normalized = False)
+            plt.title("Plot of ellipse points and the 2 axes")
+            plt.show()
+
+            # Plot the original points and the ellipse in 2D
+            figure.clear()
+            figure, figure_axes = plt.subplots(figsize = plt.figaspect(1))
+            plotting.plotPoints2D(figure_axes, points, alpha = 0.6, is_normalized = False)
+            plotting.plotPoint2D(
+                figure_axes,
+                center,
+                250,
+                "red",
+                1.0,
+                'x',
+                is_normalized = False
+            )
+            plotting.plotEllipse(
+                figure_axes,
+                center,
+                axes_lengths,
+                rotation_matrix,
+                is_normalized = False
             )
             plt.title("Plot of the ellipse and the points it encases")
             plt.show()
@@ -758,29 +898,20 @@ def checkForOutliers(intersection_points, ellipse_range_x, ellipse_range_y):
     return has_outlier
 
 
-def invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors):
+def normalizeEllipsoid(ellipsoid, offsets, scaling_factors):
     """
-    Inverse normalize the ellipsoid parameters to go from normalized space back to the
-    original space.
-
-    Input:
-        ellipsoid: The ellipsoid data object in normalized space
-        offsets: The offsets used to normalize the points
-        scaling_factors: The scaling factors used to normalize the points
-    Output:
-        ellipsoid: The ellipsoid data object in original space
+    
     """
 
     # Start with the center point
-    ellipsoid.center = util.invNormalizePoint(
-        ellipsoid.center,
-        offsets,
-        scaling_factors
-    )
+    center = ellipsoid.center
+    center[0] = (ellipsoid.center[0] - offsets[0]) / scaling_factors[0]
+    center[1] = (ellipsoid.center[1] - offsets[1]) / scaling_factors[1]
+    center[2] = (ellipsoid.center[2] - offsets[2]) / scaling_factors[2]
 
     # The axes of the ellispoid needs to be scaled according to the scaling factors
-    # applied during normalization. This is a bit more complicated since each axis
-    # needs to be scaled in each direction seperatly.
+    # applied during normalization of the full foint cloud. This is a bit more complicated
+    # since each axis needs to be scaled in each direction seperatly.
     # First make sure the axes are in their acurate length
     major_axis = ellipsoid.axes[0]
     major_axis = major_axis / np.linalg.norm(major_axis)
@@ -795,22 +926,23 @@ def invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors):
     minor_axis = minor_axis * ellipsoid.axes_lengths[2]
 
     # Then scale each axis in the x, y and z direction seperatly with the scaling factors
-    major_axis[0] = major_axis[0] * scaling_factors[0]
-    major_axis[1] = major_axis[1] * scaling_factors[1]
-    major_axis[2] = major_axis[2] * scaling_factors[2]
+    major_axis[0] = major_axis[0] / scaling_factors[0]
+    major_axis[1] = major_axis[1] / scaling_factors[1]
+    major_axis[2] = major_axis[2] / scaling_factors[2]
 
-    middle_axis[0] = middle_axis[0] * scaling_factors[0]
-    middle_axis[1] = middle_axis[1] * scaling_factors[1]
-    middle_axis[2] = middle_axis[2] * scaling_factors[2]
+    middle_axis[0] = middle_axis[0] / scaling_factors[0]
+    middle_axis[1] = middle_axis[1] / scaling_factors[1]
+    middle_axis[2] = middle_axis[2] / scaling_factors[2]
 
-    minor_axis[0] = minor_axis[0] * scaling_factors[0]
-    minor_axis[1] = minor_axis[1] * scaling_factors[1]
-    minor_axis[2] = minor_axis[2] * scaling_factors[2] 
+    minor_axis[0] = minor_axis[0] / scaling_factors[0]
+    minor_axis[1] = minor_axis[1] / scaling_factors[1]
+    minor_axis[2] = minor_axis[2] / scaling_factors[2] 
 
-    # Then measure the new length of the axes and that is the non normalized axes lengths
-    ellipsoid.axes_lengths[0] = np.linalg.norm(major_axis)
-    ellipsoid.axes_lengths[1] = np.linalg.norm(middle_axis)
-    ellipsoid.axes_lengths[2] = np.linalg.norm(minor_axis)
+    # Then measure the new length of the axes and that is the normalized axes lengths
+    axes_lengths = ellipsoid.axes_lengths
+    axes_lengths[0] = np.linalg.norm(major_axis)
+    axes_lengths[1] = np.linalg.norm(middle_axis)
+    axes_lengths[2] = np.linalg.norm(minor_axis)
 
     # Then the new rotation matrix can be constructed with the new axes in unit length
     major_axis = major_axis / np.linalg.norm(major_axis)
@@ -818,9 +950,15 @@ def invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors):
     minor_axis = minor_axis / np.linalg.norm(minor_axis)
 
     rotaion_matrix = np.array([major_axis, middle_axis, minor_axis])
-    ellipsoid.rotation_matrix = rotaion_matrix.T
+    rotation_matrix = rotaion_matrix.T
 
-    return ellipsoid
+    return Ellipsoid(
+        ellipsoid.ellipsoid_matrix,
+        center, 
+        ellipsoid.axes,
+        axes_lengths,
+        rotation_matrix 
+    )
 
 
 def createEllipse(data, time_step, ssb_normal, texture_directory, configuration):
@@ -871,7 +1009,69 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         plt.show()
 
     # Create an ellipsoid data objects with all of the ellipsoid features
-    ellipsoid = createEllipsoid(normalized_coordinates, do_plotting, True)
+    ellipsoid = createEllipsoidFromMatrix(
+        coordinates,
+        data.covariances[time_step],
+        do_plotting,
+        True
+    )
+
+    # Make sure the original ellipsoid does not get normalized, create a deep copy
+    normalized_ellipsoid = deepcopy(ellipsoid)
+    normalized_ellipsoid = normalizeEllipsoid(
+        normalized_ellipsoid,
+        offsets,
+        scaling_factors
+    )
+
+    if do_plotting:
+        # Plot the non-normalized points and the ellipsoid as a transparent 3D shape
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, coordinates, alpha = 0.6)
+        plotting.plotPoint3D(
+            figure_axes,
+            ellipsoid.center,
+            250,
+            "red",
+            1.0,
+            'x',
+            is_normalized = False
+        )
+        plotting.plotEllipsoid(
+            figure_axes,
+            ellipsoid.center,
+            ellipsoid.axes_lengths,
+            ellipsoid.rotation_matrix,
+            is_normalized = False
+        )
+        plt.title("Plot of the non-normalized ellipsoid and the points it encases")
+        figure_axes.set_xlim(offsets[0], scaling_factors[0] + offsets[0])
+        figure_axes.set_ylim(offsets[1], scaling_factors[1] + offsets[1])
+        figure_axes.set_zlim(offsets[2], scaling_factors[2] + offsets[2])
+        plt.show()
+        
+        # Plot the normalized points and the ellipsoid as a transparent 3D shape
+        figure.clear()
+        figure = plt.figure(figsize = plt.figaspect(1))
+        figure_axes = figure.add_subplot(projection = '3d')
+        plotting.plotPoints3D(figure_axes, normalized_coordinates, alpha = 0.6)
+        plotting.plotPoint3D(
+            figure_axes,
+            normalized_ellipsoid.center,
+            250,
+            "red",
+            1.0,
+            'x'
+        )
+        plotting.plotEllipsoid(
+            figure_axes,
+            normalized_ellipsoid.center,
+            normalized_ellipsoid.axes_lengths,
+            normalized_ellipsoid.rotation_matrix
+        )
+        plt.title("Plot of the normalized ellipsoid and the points it encases")
+        plt.show()
 
     # Transform all points to be on the a plane that is perpendicular to the direction
     # towards the Sun. The median velocity vector is used as the normal of this plane.
@@ -902,10 +1102,10 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         figure = plt.figure(figsize = plt.figaspect(1))
         axes = figure.add_subplot(projection = '3d')
         plotting.plotPoints3D(axes, normalized_coordinates)
-        plotting.plotPoint3D(axes, ellipsoid.center, 250, "red", 1.0, 'x')
+        plotting.plotPoint3D(axes, normalized_ellipsoid.center, 250, "red", 1.0, 'x')
         plotting.plotVector3D(
             axes,
-            ellipsoid.center,
+            normalized_ellipsoid.center,
             mean_velocity,
             "red"
         )
@@ -923,7 +1123,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         normalized_coordinates,
         velocities,
         median_velocity,
-        ellipsoid.center,
+        normalized_ellipsoid.center,
         do_plotting
     )
     
@@ -938,7 +1138,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         ellipse.axes_lengths,
         ellipse.rotation_matrix,
         ssb_normal,
-        ellipsoid.center,
+        normalized_ellipsoid.center,
         median_velocity,
         do_plotting
     )
@@ -978,7 +1178,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
     # Transform the ellipse samples back to the original 3D space
     samples_3D = util.invTransformPointsToXYPlane(
         samples_2D,
-        ellipsoid.center,
+        normalized_ellipsoid.center,
         median_velocity,
         do_plotting
     )
@@ -988,12 +1188,19 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         figure = plt.figure(figsize = plt.figaspect(1))
         figure_axes = figure.add_subplot(projection = '3d')
         plotting.plotPoints3D(figure_axes, samples_3D, alpha = 0.6)
-        plotting.plotPoint3D(figure_axes, ellipsoid.center, 250, "red", 1.0, 'x')
+        plotting.plotPoint3D(
+            figure_axes,
+            normalized_ellipsoid.center,
+            250,
+            "red",
+            1.0,
+            'x'
+        )
         plotting.plotEllipsoid(
             figure_axes,
-            ellipsoid.center,
-            ellipsoid.axes_lengths,
-            ellipsoid.rotation_matrix
+            normalized_ellipsoid.center,
+            normalized_ellipsoid.axes_lengths,
+            normalized_ellipsoid.rotation_matrix
         )
         plt.title("Plot of the sampled 2D ellipse and the original 3D ellipsoid")
         plt.show()
@@ -1005,9 +1212,6 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         offsets,
         scaling_factors
     )
-
-    # Inverse normalize the ellipsoid too
-    ellipsoid = invNormalizeEllipsoid(ellipsoid, offsets, scaling_factors)
 
     # Plot the original points and the ellipse sample points in non-normalized space
     # together with the non-normalized ellipsoid
@@ -1029,6 +1233,9 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
             is_normalized = False
         )
         plt.title("Plot of the coordinates, the ellipse samples and the ellipsoid in non-normalized space")
+        figure_axes.set_xlim(offsets[0], scaling_factors[0] + offsets[0])
+        figure_axes.set_ylim(offsets[1], scaling_factors[1] + offsets[1])
+        figure_axes.set_zlim(offsets[2], scaling_factors[2] + offsets[2])
         plt.show()
 
     # Create a list of EllipseSamplePoint data objects for each sample point to store the
