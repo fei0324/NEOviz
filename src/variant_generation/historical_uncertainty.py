@@ -265,9 +265,10 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         # Recompute covariances of propagated variants, collapse the variants into a
         # single orbit to get one covariance matrix per timestep. Do this last as it will
         # change the variants data structure
-        #propagated_variants.collapse(propagated_best_fit_orbit)
-        #covariances = propagated_variants.coordinates.covariance.to_matrix()
-        covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+        #collapsed_variants = propagated_variants.collapse(propagated_best_fit_orbit)
+        #covariances = collapsed_variants.coordinates.covariance.to_matrix()
+        #covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+        covariances = propagated_variants.coordinates.covariance.to_matrix()
 
         # Store the generated data in a data object
         variant_data = adam_util.VariantsData(

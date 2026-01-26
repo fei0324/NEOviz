@@ -253,15 +253,32 @@ def createEllipsoidFromMatrix(points, ellipsoid_matrix, do_plotting, is_3d = Tru
             rotation_matrix: The rotation matrix of the ellipsoid
     """
 
-    # Slice the ellipsoid matrix so we only work with the positional uncertainty
-    #ellipsoid_matrix = make_positive_semidefinite(ellipsoid_matrix)
-    ellipsoid_matrix = ellipsoid_matrix[:3, :3]
-    
     # Compute a minimum encasing ellipsoid for the points using mvee. Use this only to
     # estimate the center of the ellipoid
     center = np.mean(points, axis = 1)
     print("Center", center)
     
+    # The ellipsoid_matrix must be symetric
+    if not np.allclose(ellipsoid_matrix, ellipsoid_matrix.T):
+        print("Covariance matrix is not symetric")
+        
+        # Try to use the function make_positive_semidefinite to adjust the matrix to be
+        # symetric
+        try:
+            print("Making the matrix symetric")
+            ellipsoid_matrix = make_positive_semidefinite(ellipsoid_matrix)
+
+            # Slice the ellipsoid matrix so we only work with the positional uncertainty
+            ellipsoid_matrix = ellipsoid_matrix[:3, :3]
+        except np.linalg.LinAlgError:
+            # If this was not possible, then use MVEE to generate an ellipsoid instead
+            print("\033[41mWarning:\033[0m Unable to make matrix symetric")
+            print("Running MVEE to find a symetric matrix")
+            ellipsoid_matrix, center = calcMveeEllipsoid(points)
+    else:
+        # Slice the ellipsoid matrix so we only work with the positional uncertainty
+        ellipsoid_matrix = ellipsoid_matrix[:3, :3]
+
     # Get the ellipsoid shape characteristics
     axes, axes_lengths, rotation_matrix = calcEllipsoidParameters(ellipsoid_matrix)
 

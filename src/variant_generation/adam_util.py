@@ -121,6 +121,7 @@ def clacNumTimeSteps(start_interval, end_interval, samples_per_day = 1):
         # number of samples per day to get the number of timesteps for the propagation.
         num_steps = math.ceil(time_interval)
         num_steps *= samples_per_day
+        print("Using samples per day:", samples_per_day)
 
     # Make sure the number of timesteps is at least the minimum required by the propagator
     return max(num_steps, MINIMUM_TIMESTEPS)
@@ -373,6 +374,8 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
                 ), 
                 propagation_times,
                 covariance = True,
+                covariance_method = "monte-carlo",
+                num_samples = batch_num_variants,
                 max_processes = num_threads,
                 chunk_size = chunk_size
             )
@@ -394,7 +397,9 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
                 coordinates = variants.coordinates,
             ), 
             propagation_times,
-            covariance = False,
+            covariance = True,
+            covariance_method = "monte-carlo",
+            num_samples = num_variants,
             max_processes = num_threads,
             chunk_size = chunk_size
         )
@@ -476,9 +481,10 @@ def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants):
     # Recompute covariances of propagated variants, collapse the variants into a
     # single orbit to get one covariance matrix per timestep. Do this last as it will
     # change the variants data structure
-    #propagated_variants.collapse(propagated_best_fit_orbit)
-    #covariances = propagated_variants.coordinates.covariance.to_matrix()
-    covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+    #collapsed_variants = propagated_variants.collapse(propagated_best_fit_orbit)
+    #covariances = collapsed_variants.coordinates.covariance.to_matrix()
+    #covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+    covariances = propagated_variants.coordinates.covariance.to_matrix()
 
     # Store in the dataobject 
     return VariantsData(

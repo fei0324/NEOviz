@@ -10,7 +10,12 @@
   "tube_type": "sectioned",
   "gap_percentage": 5.0,
 
-  "num_variants": 1000,
+  "use_high_res_timeframe": true,
+  "high_res_start_time": "2013-01-15T00:00:00.000",
+  "high_res_end_time": "2013-03-15T00:00:00.000",
+  "high_res_sample_multiplier": 48,
+
+  "num_variants": 100,
   "num_polygon_samples": 80,
 
   "save_intermediate_results": true,

@@ -59,8 +59,8 @@ if __name__ == "__main__":
 
     # Get the input configuration file that contain all settings and parameters
     #configuration_file = "../config/historical_2004_MN4_test.json"
-    #configuration_file = "../config/sectioned_2012_DA14_test.json"
-    configuration_file = "../config/historical_2023_CX1_test.json"
+    configuration_file = "../config/sectioned_2012_DA14_test.json"
+    #configuration_file = "../config/historical_2023_CX1_test.json"
     configuration_data = None
 
     # Try to read the configuration json file
@@ -69,8 +69,10 @@ if __name__ == "__main__":
             configuration_data = json.load(file)
     except FileNotFoundError:
         print("Error: The file", configuration_file, "was not found.")
+        assert False, "Configuration file not found"
     except json.JSONDecodeError:
         print("Error: Failed to decode JSON from file", configuration_file)
+        assert False, "Configuration file could not be decoded"
     
     # Check version number of the configuration file
     version = configuration_data["version"]
