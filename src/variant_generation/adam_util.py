@@ -12,12 +12,15 @@ from adam_core.orbits import Orbits
 from adam_core.coordinates import CartesianCoordinates
 from adam_core.orbits import VariantOrbits
 
+import tube_generation.util as util
+
 # TODO: Set the correct minimum number of timesteps required by the propagator
 MINIMUM_TIMESTEPS = 80
 
 # The propagator is slow and cannot handle too amny samples at the same time (even if it
 # chunks) so we need to perform some additional chunking manually.
-MAX_NUM_VARIANTS_PER_BATCH = 512
+MAX_NUM_SAMPLES_PER_BATCH = 512
+MAX_NUM_VARIANTS_PER_BATCH = 256
 
 # The number of meters in one Astronomical Unit (AU)
 AU = 149597870700.0
@@ -31,7 +34,15 @@ class VariantsData:
     times: np.array
     covariances: np.array
     num_variants: int
-    num_time_steps: int 
+    num_time_steps: int
+    best_fit_orbit_coordinates: np.array
+
+@dataclass
+class ImpactData:
+    spice_id: int
+    latitude: float
+    longitude: float
+    time: str
 
 # Table to store resulting fitted orbits along with metadata about the result from the
 # fitting process.
@@ -93,6 +104,59 @@ def loadSubmissionsAndOrbits(mpc_directory, orbit_fits_directory):
         )
 
     return submissions, submission_orbits
+
+
+def loadImpactData(impact_file, orbit_id):
+    """
+    """
+
+    # Read the file content
+    content = util.readFile(impact_file)
+
+    # Check the first line to see that it is the correct object ID
+    object_line = content[0].strip()
+    if not object_line.startswith(orbit_id):
+        print("Impact file", impact_file, "does not match orbit ID", orbit_id)
+        assert False, "Impact file does not match orbit ID"
+
+    # Parse the content into ImpactData objects
+    impact_data = []
+    start_parsing = False
+    for line in content:
+        line = line.strip()
+
+        # Skip until the header line
+        if not start_parsing and line.startswith("Varient"):
+            # This is the header line, the next line is the first data entry
+            start_parsing = True
+            continue
+        elif start_parsing and line == "":
+            # Reached the end of the data entries
+            break
+
+        if start_parsing:
+            # Parse the data line
+            parts = line.split()
+            spice_id = int(parts[0])
+            latitude = float(parts[1])
+            longitude = float(parts[2])
+            time = parts[3]
+
+            print("Loaded impact data for variant", spice_id,
+                  "lat:", latitude, "lon:", longitude, "time:", time)
+
+            # Store it in the list
+            impact_data.append(
+                ImpactData(
+                    spice_id = spice_id,
+                    latitude = latitude,
+                    longitude = longitude,
+                    time = time
+                )
+            )
+
+    # Return the list of variant impacts
+    return impact_data
 
 
 def clacNumTimeSteps(start_interval, end_interval, samples_per_day = 1):
@@ -215,12 +279,12 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
     bf_orbit = best_fit_orbit.to_orbits()
 
     # Do manual batching if the number of samples is too high for the propagator to handle
-    if num_samples > MAX_NUM_VARIANTS_PER_BATCH:
+    if num_samples > MAX_NUM_SAMPLES_PER_BATCH:
         print("The number of samples is larger than the maximum allowed per batch")
         print("Performing manual batching of propagation")
 
         # Calculate the number of batches needed
-        num_batches = math.ceil(num_samples / MAX_NUM_VARIANTS_PER_BATCH)
+        num_batches = math.ceil(num_samples / MAX_NUM_SAMPLES_PER_BATCH)
         print("Number of batches:", num_batches)
 
         # Propagate each batch separately
@@ -229,8 +293,8 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
             print("Propagating batch", batch_index + 1, "of", num_batches)
 
             # Calculate the number of samples for this batch
-            start_sample = batch_index * MAX_NUM_VARIANTS_PER_BATCH
-            end_sample = min(start_sample + MAX_NUM_VARIANTS_PER_BATCH, num_samples)
+            start_sample = batch_index * MAX_NUM_SAMPLES_PER_BATCH
+            end_sample = min(start_sample + MAX_NUM_SAMPLES_PER_BATCH, num_samples)
             batch_num_samples = end_sample - start_sample
             print("Number of samples in batch:", batch_num_samples)
 
@@ -269,8 +333,8 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
         print("Finished all batches")
         
     else:
-        # Propagate the best fit orbit for a submission forward in time using the propagation
-        # sample times
+        # Propagate the best fit orbit for a submission forward in time using the
+        # propagation sample times
         propagated_orbit = propagator.propagate_orbits(
             best_fit_orbit.to_orbits(), 
             propagation_times, 
@@ -294,8 +358,9 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
 
 
 def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
-                      num_variants, submission_number, submission_id, start_index = 0,
-                      num_threads = 1, chunk_size = 1):
+                      num_variants, submission_number, submission_id, configuration,
+                      start_index = 0, num_threads = 1, chunk_size = 1,
+                      submission_output_directory = ""):
     """
     Generate variant orbits based on the propagated best fit orbit for the given
     submission and propagate them forward in time using the given propagation times.
@@ -320,25 +385,56 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     Output:
         propagated_variants: The propagated variant orbits
     """
-    # Use the propagated orbit to generate variant samples based on the uncertainty
-    # of the orbit. The index of propagated_best_fit_orbit is which timestep to use to
-    # seed the variants at.
-    print("Generating variant samples at timestep", start_index)
-    variants = VariantOrbits.create(
-        propagated_best_fit_orbit[start_index],
-        method = "monte-carlo", 
-        num_samples = num_variants
-    )
 
-    # Set the correct ID for each variant
-    variants = variants.set_column(
-        "orbit_id", 
-        pa.array(
-            [f"{submission_number:03d}::{submission_id}::{i + 1:06}" \
-            for i in range(len(variants))],
-            type = pa.large_string()
-        )
+    # Check if there already are variant seeds saved for this submission
+    variant_seeds_path = os.path.join(
+        submission_output_directory,
+        "variant_seeds.parquet"
     )
+    seeds_exists = os.path.exists(variant_seeds_path)
+
+    # Load existing batch if it exists
+    variants = None
+    if seeds_exists and configuration["use_existing_variants"]:
+        print(
+            "Loading existing variant seeds from",
+            variant_seeds_path
+        )
+        variants = Orbits.from_parquet(variant_seeds_path)
+    else:
+        # Use the propagated orbit to generate variant samples based on the uncertainty
+        # of the orbit. The index of propagated_best_fit_orbit is which timestep to use to
+        # seed the variants at.
+        print("Generating variant samples at timestep", start_index)
+        variants = VariantOrbits.create(
+            propagated_best_fit_orbit[start_index],
+            method = "monte-carlo",
+            num_samples = num_variants
+        )
+
+        # Set the correct ID for each variant
+        variants = variants.set_column(
+            "orbit_id", 
+            pa.array(
+                [f"{submission_number:03d}::{submission_id}::{i + 1:06}" \
+                for i in range(len(variants))],
+                type = pa.large_string()
+            )
+        )
+
+        # Save the variant seeds
+        if configuration["save_intermediate_results"]:
+            print("Saving variant seeds to", variant_seeds_path)
+            variants.to_parquet(variant_seeds_path)
+
+    # Create output directory for batches if requested
+    batches_output_directory = None
+    if configuration["save_intermediate_results"]:
+        batches_output_directory = os.path.join(
+            submission_output_directory,
+            "variant_batches"
+        )
+        os.makedirs(batches_output_directory, exist_ok = True)
 
     # Propagate the variants sample points forward in time to the end time
     print("Starting to propagate variant samples")
@@ -357,28 +453,50 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
         # Propagate each batch separately
         is_first = True
         for batch_index in range(num_batches):
-            print("Propagating batch", batch_index + 1, "of", num_batches)
+            propagated_batch_variants = None
 
-            # Calculate the number of variants for this batch
-            start_variant = batch_index * MAX_NUM_VARIANTS_PER_BATCH
-            end_variant = min(start_variant + MAX_NUM_VARIANTS_PER_BATCH, num_variants)
-            batch_num_variants = end_variant - start_variant
-            print("Number of variants in batch:", batch_num_variants)
-
-            # Propagate the batch
-            propagated_batch_variants = propagator.propagate_orbits(
-                Orbits.from_kwargs(
-                    orbit_id = variants[start_variant:end_variant].orbit_id,
-                    object_id = variants[start_variant:end_variant].object_id,
-                    coordinates = variants[start_variant:end_variant].coordinates,
-                ), 
-                propagation_times,
-                covariance = True,
-                covariance_method = "monte-carlo",
-                num_samples = batch_num_variants,
-                max_processes = num_threads,
-                chunk_size = chunk_size
+            # Check if we can load an existing propagated batch
+            batch_parquet_path = os.path.join(
+                batches_output_directory,
+                "propagated_batch_"+ str(batch_index) + ".parquet"
             )
+            parquet_exists = os.path.exists(batch_parquet_path)
+
+            # Load existing batch if it exists
+            if parquet_exists and configuration["use_existing_variants"]:
+                print(
+                    "Loading existing variants in batch from",
+                    batch_parquet_path
+                )
+                propagated_batch_variants = Orbits.from_parquet(batch_parquet_path)
+            else:
+                print("Propagating batch", batch_index + 1, "of", num_batches)
+
+                # Calculate the number of variants for this batch
+                start_variant = batch_index * MAX_NUM_VARIANTS_PER_BATCH
+                end_variant = min(
+                    start_variant + MAX_NUM_VARIANTS_PER_BATCH,
+                    num_variants
+                )
+                batch_num_variants = end_variant - start_variant
+                print("Number of variants in batch:", batch_num_variants)
+
+                # Propagate the batch
+                propagated_batch_variants = propagator.propagate_orbits(
+                    Orbits.from_kwargs(
+                        orbit_id = variants[start_variant:end_variant].orbit_id,
+                        object_id = variants[start_variant:end_variant].object_id,
+                        coordinates = variants[start_variant:end_variant].coordinates,
+                    ), 
+                    propagation_times,
+                    covariance = False,
+                    max_processes = num_threads,
+                    chunk_size = chunk_size
+                )
+
+                # Save the batch
+                if configuration["save_intermediate_results"]:
+                    propagated_batch_variants.to_parquet(batch_parquet_path)
 
             # Append the propagated batch to the full propagated orbit
             if is_first:
@@ -397,9 +515,7 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
                 coordinates = variants.coordinates,
             ), 
             propagation_times,
-            covariance = True,
-            covariance_method = "monte-carlo",
-            num_samples = num_variants,
+            covariance = False,
             max_processes = num_threads,
             chunk_size = chunk_size
         )
@@ -416,7 +532,7 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     return propagated_variants
 
 
-def processVariants(propagated_variants, num_time_steps):
+def processVariants(propagated_variants, num_time_steps, propagated_best_fit_orbit):
     """
     
     """
@@ -425,6 +541,7 @@ def processVariants(propagated_variants, num_time_steps):
     # all varaint coordinates and velocities per timestep to create time-slices
     ordered_variants_coordinates = []
     ordered_variants_velocities = []
+    ordered_bfo_coordinates = []
 
     # We only take the coordinate or velocity cooresponding to the t:th timestamp
     # for each orbit. Also rescale the coordinates from AU to meters and velocities
@@ -435,6 +552,9 @@ def processVariants(propagated_variants, num_time_steps):
         # Positions in AU (.r is the position vector)
         ordered_variants_coordinates.append(
             propagated_variants.coordinates.r[t::num_time_steps] * AU
+        )
+        ordered_bfo_coordinates.append(
+            propagated_best_fit_orbit.coordinates.r[t::num_time_steps] * AU
         )
         # Velocities in AU/day (.v is the velocity vector)
         ordered_variants_velocities.append(
@@ -448,10 +568,12 @@ def processVariants(propagated_variants, num_time_steps):
     return \
         ordered_variants_coordinates, \
         ordered_variants_velocities, \
-        times_isot
+        times_isot, \
+        ordered_bfo_coordinates
 
 
-def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants):
+def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants,
+                     configuration):
     """
     
     """
@@ -475,7 +597,12 @@ def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants):
     # Process the variants
     ordered_variants_coordinates, \
     ordered_variants_velocities, \
-    times_isot = processVariants(propagated_variants, num_time_steps)
+    times_isot, \
+    ordered_bfo_coordinates = processVariants(
+        propagated_variants,
+        num_time_steps,
+        propagated_best_fit_orbit
+    )
 
     # TODO: Fix this
     # Recompute covariances of propagated variants, collapse the variants into a
@@ -483,8 +610,8 @@ def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants):
     # change the variants data structure
     #collapsed_variants = propagated_variants.collapse(propagated_best_fit_orbit)
     #covariances = collapsed_variants.coordinates.covariance.to_matrix()
-    #covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
-    covariances = propagated_variants.coordinates.covariance.to_matrix()
+    covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+    #covariances = propagated_variants.coordinates.covariance.to_matrix()
 
     # Store in the dataobject 
     return VariantsData(
@@ -493,7 +620,8 @@ def loadVariantsData(data_directory, propagated_best_fit_orbit, num_variants):
         times_isot,
         covariances,
         num_variants,
-        num_time_steps
+        num_time_steps,
+        ordered_bfo_coordinates
     )
 
 

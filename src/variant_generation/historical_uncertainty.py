@@ -16,7 +16,8 @@ import variant_generation.kernels as kernels
 
 # Settings for chunking the propagation
 MAX_THREADS = 8
-CHUNK_SIZE = 256 # 128
+VARIANTS_CHUNK_SIZE = 128
+SAMPLES_CHUNK_SIZE = 256
 
 # The number of meters in one Astronomical Unit (AU)
 AU = 149597870700.0
@@ -60,8 +61,10 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
     high_res_start_time = None
     high_res_end_time = None
     if use_high_res_timeframe:
+        # NOTE: It is important that the high resulution timeframe is within the overall
+        # start and end time. This is not checked, so the user must ensure this.
         high_res_start_time = Time(configuration["high_res_start_time"], format = "isot") 
-        high_res_end_time = Time(configuration["high_res_end_time"])
+        high_res_end_time = Time(configuration["high_res_end_time"], format = "isot")
     
     # Load the submission and best fit orbit data
     submissions, submission_orbits = adam_util.loadSubmissionsAndOrbits(
@@ -76,9 +79,9 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         format = "datetime64"
     )
 
-    # Process each submission. Usually the time of interest is very close to the start
-    # time (Since the uncertainty is high when the object is newly discovered) so only a
-    # very few number of submissions will be processed. 
+    # Process each submission. For historical tubes, it is important that only one
+    # submission is precessed. The start time and time of historical interest need to be
+    # set to ensure this
     variants_data = []
     for i, submission_orbit in enumerate(submission_orbits):
         # Get the submission information (ID, timestamp)
@@ -104,9 +107,12 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             print("Reached time of historical interest, skipping any further submissions")
             break
         if submission_time > end_time:
-            # If the time is past the end time then we stop as well
+            # If the time is past the end time then we stop
             print("Reached end time, stopping propagation")
             break
+
+        # NOTE: We know that we are processign the correct historicaly interesting
+        # submission from this point on in the code
 
         # Create a new data folder in the output directory for this submission,
         # if requested
@@ -117,10 +123,26 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         os.makedirs(submission_output_directory, exist_ok = True)
 
         # Create sample times from now to the end time
-        propagation_times, num_time_steps = adam_util.getTimeSteps(
-            submission_time,
-            end_time
-        )
+        propagation_times = None
+        num_time_steps = None
+        if use_high_res_timeframe:
+            # If high resolution time frame is used, create propagation times within that
+            # time frame instead of over the full start to end times
+            # NOTE: If previous oribt/variants exist, and are being used, then if the high
+            # res timeframe is different from before (when the variants were generated and
+            # stored) it will use the old timesteps. A rerun is only triggered when the
+            # override_existing_results flag is set to True (while use_existing_variants
+            # is False). Or if the number of variants is different than before.
+            propagation_times, num_time_steps = adam_util.getTimeSteps(
+                high_res_start_time,
+                high_res_end_time,
+                configuration["high_res_sample_multiplier"]
+            ) 
+        else:
+            propagation_times, num_time_steps = adam_util.getTimeSteps(
+                submission_time,
+                end_time
+            )
         
         # Check if there are existing results for this submission
         parquet_path = os.path.join(
@@ -141,14 +163,14 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         # Propagate the best fit orbit for this submission forward in time
         propagated_best_fit_orbit = None
         if should_propagate:
-            # TODO: Use more samples for a better covariance matrix estimation
+            # TODO: Use more samples for a better covariance matrix estimation?
             propagated_best_fit_orbit = adam_util.propagateBestFitOrbit(
                 submission_orbit,
                 propagator,
                 propagation_times,
                 num_variants,
                 num_threads = MAX_THREADS,
-                chunk_size = CHUNK_SIZE
+                chunk_size = SAMPLES_CHUNK_SIZE
             )
 
             if configuration["save_intermediate_results"]:
@@ -185,56 +207,37 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             variant_data = adam_util.loadVariantsData(
                 submission_output_directory,
                 propagated_best_fit_orbit,
-                num_variants
+                num_variants,
+                configuration
             )
             variants_data.append(variant_data)
             continue
-
-        # If high resolution time frame is used, create new propagation times for the
-        # variants in that time frame.
-        # NOTE: If previous variants exist, and are being used, then if the high res
-        # timeframe is different from before (when the variants were generated and stored)
-        # it will use the old timesteps. A rerun is only triggered when the
-        # override_existing_results flag is set to True (while use_existing_variants is
-        # False). Or if the number of variants is different than before.
-        start_index = 0
-        num_variant_time_steps = num_time_steps
-        variant_propagation_times = propagation_times
-        if use_high_res_timeframe:
-            # Find the timestep in the propagated best fit orbit that is closest to the
-            # high resolution start time
-            high_res_start_time_actual, start_index = adam_util.findVariantsStartTime(
-                propagated_best_fit_orbit,
-                high_res_start_time
-            )
-
-            # Create new high resolution time steps for the variants over the high
-            # resolution timeframe
-            variant_propagation_times, num_variant_time_steps = adam_util.getTimeSteps(
-                high_res_start_time_actual.to_astropy(),
-                high_res_end_time,
-                configuration["high_res_sample_multiplier"]
-            )
 
         # Generate variants based on the propagated best fit orbit and propagate them
         # over time
         propagated_variants = adam_util.propagateVariants(
             propagated_best_fit_orbit,
             propagator,
-            variant_propagation_times,
+            propagation_times,
             num_variants,
             submission_number,
             submission_id,
-            start_index,
-            MAX_THREADS,
-            CHUNK_SIZE
+            configuration,
+            num_threads = MAX_THREADS,
+            chunk_size = VARIANTS_CHUNK_SIZE,
+            submission_output_directory = submission_output_directory
         )
 
         # Prosess the propagated variants to get ordered arrays of coordinates,
         # velocities, and times
         ordered_variants_coordinates, \
         ordered_variants_velocities, \
-        times_isot = adam_util.processVariants(propagated_variants, num_time_steps)
+        times_isot, \
+        ordered_bfo_coordinates = adam_util.processVariants(
+            propagated_variants,
+            num_time_steps,
+            propagated_best_fit_orbit
+        )
 
         # Save variants data to file, if requested
         if configuration["save_intermediate_results"]:
@@ -267,8 +270,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         # change the variants data structure
         #collapsed_variants = propagated_variants.collapse(propagated_best_fit_orbit)
         #covariances = collapsed_variants.coordinates.covariance.to_matrix()
-        #covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
-        covariances = propagated_variants.coordinates.covariance.to_matrix()
+        covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
+        #covariances = propagated_variants.coordinates.covariance.to_matrix()
 
         # Store the generated data in a data object
         variant_data = adam_util.VariantsData(
@@ -277,7 +280,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             times_isot,
             covariances,
             num_variants,
-            num_variant_time_steps
+            num_time_steps,
+            ordered_bfo_coordinates
         )
         variants_data.append(variant_data)
              

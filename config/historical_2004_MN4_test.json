@@ -11,16 +11,19 @@
   "time_of_historical_interest": "2004-12-28T00:00:00.000",
 
   "use_high_res_timeframe": true,
-  "high_res_start_time": "2029-03-13T00:00:00.000",
-  "high_res_end_time": "2029-05-13T00:00:00.000",
+  "high_res_start_time": "2029-03-30T00:00:00.000",
+  "high_res_end_time": "2029-05-01T00:00:00.000",
   "high_res_sample_multiplier": 48,
 
-  "num_variants": 10000,
+  "num_variants": 1000,
   "num_polygon_samples": 80,
+
+  "has_impact": false,
 
   "save_intermediate_results": true,
   "override_existing_results": true,
-  "use_existing_best_fit_orbit": true,
+  "use_existing_best_fit_orbit": false,
+  "use_existing_variants": false,
 
   "save_textures": true,
   "texture_resolution": 500,

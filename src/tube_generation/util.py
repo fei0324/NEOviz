@@ -7,11 +7,14 @@ import tube_generation.plotting as plotting
 
 EPSILON = 1e-4
 
+# SPICE ID offset
+SPICE_OFFSET = 1000000
 
 # General functions
 def readFile(filename):
     """
     Read the content of a file and return it as a string.
+    
     Input:
         filename: The path to the file to read
     Output:
@@ -407,3 +410,38 @@ def getSolarSystemNormal(utc_time):
     # TODO: Why are we not using the transformation matrix? 
     # Return the normalized vector
     return eclip_normal/np.linalg.norm(eclip_normal)
+
+
+def getImpactedVariantsAtTime(impact_data, time_astrop):
+    """
+    """
+
+    # Loop over all impact and check if any of them impact before the given time
+    impacted_variants = []
+    for impact in impact_data:
+        if impact.time <= time_astrop:
+            impacted_variants.append(impact.spice_id)
+
+    return impacted_variants
+
+
+def excludeVariants(coordinates, excluded_variants):
+    """
+    """
+
+    # Get the spice id form the excluded variants and convert it into a set of indicies
+    # of the coordinates
+    excluded_indices = []
+    for variant in excluded_variants:
+        # Index in list (such as index number 0 or 153) = index
+        # SPICE id (such as 1000000 or 1000153) = SPICE_OFFSET + index
+        # Filename (such as 000001.bsp or 000154.bsp) =
+        #     (K-width zero-padded string of index + 1).bsp (K is by default 6)
+        spice_id = variant
+        index = spice_id - SPICE_OFFSET
+        excluded_indices.append(index)
+
+    # Create a mask for the coordinates to exclude the excluded indices
+    mask = np.ones(coordinates.shape[1], dtype = bool)
+    mask[excluded_indices] = False
+    return coordinates[:, mask]

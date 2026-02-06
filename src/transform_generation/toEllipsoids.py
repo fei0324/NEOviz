@@ -128,4 +128,5 @@ def generateEllipsoids(ellipsoids_filename, output_directory, time_polygons,
 
     # Save it to file
     filepath = os.path.join(output_directory, ellipsoids_filename)
+    print("Writing ellipsoids file", filepath)
     util.writeFile(filepath, ellipsoid_asset)

@@ -978,17 +978,20 @@ def normalizeEllipsoid(ellipsoid, offsets, scaling_factors):
     )
 
 
-def createEllipse(data, time_step, ssb_normal, texture_directory, configuration):
+def createEllipse(data, time_step, ssb_normal, texture_directory, configuration,
+                  impact_data = None):
     """
     Create just one ellipse in the tube
 
     Input:
-        data: The VariantData object with all of the variant data
+        data: The VariantData object containing all variant data
         time_step: The timestep index to create the ellipse for
-        num_ellipse_samples: The number of samples to take on the ellipse
         ssb_normal: The SSB vector in 3D world space
-        save_textures: Whether to save textures for this timestep or not
-        do_plotting: Whether to do debug plotting or not
+        texture_directory: The directory where to save any generated textures
+        configuration: A dictionary containing configuration parameters
+        impact_data: A list of ImpactData object containing information about any known
+                     impacting variants. This is used to exlude those variants at the
+                     moment of impact.
     Output:
         ellipse: One ellipse data object for the given timestep
         ellipsoid: One ellipsoid that encapsulated the 3D points for the given timestep
@@ -999,12 +1002,24 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
     save_textures = configuration["save_textures"]
     texture_resolution = configuration["texture_resolution"]
 
-    print("\nTime", data.times[time_step])
-    print("Time step number", time_step)
-    
+    time_astropy = data.times[time_step]
+    print("\nTime", time_astropy)
+    print("Time step number", time_step, "of", data.num_time_steps)
+
     # Get the variant coordinate list for this timestep. The coordinates are in meters 
     # and relative the SUN (TODO: Or SSB need to check that)
     coordinates = data.variants_coordinates[time_step].T
+    bfo_coordinate = data.best_fit_orbit_coordinates[time_step].T[:, 0]
+
+    # Check if any variants should be excluded since they have already impacted at this
+    # time step    
+    has_impacts = impact_data is not None
+    if has_impacts:
+        excluded_variants = util.getImpactedVariantsAtTime(impact_data, time_astropy)
+        if len(excluded_variants) > 0:
+            print("Excluding", len(excluded_variants),
+                "impacted variants at this time step")
+            coordinates = util.excludeVariants(coordinates, excluded_variants)
 
     # Plot the points for this timestep
     if do_plotting:
@@ -1032,6 +1047,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
         do_plotting,
         True
     )
+    ellipsoid.center = bfo_coordinate
 
     # Make sure the original ellipsoid does not get normalized, create a deep copy
     normalized_ellipsoid = deepcopy(ellipsoid)
@@ -1275,18 +1291,19 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration)
     return ellipse_sample_points, ellipsoid, saved_texture
 
 
-def createEllipses(variants_data, output_directory, configuration):
+def createEllipses(variants_data, output_directory, configuration, impact_data = None):
     """
     Take the input data and create a list of all ellipses that will be the base for the
     tube
 
     Input:
-        data: Data object with the data from the input files
-        num_ellipse_samples: The number of samples to take on each ellipse
-        out_directory: The output directory to store the generated textures
-        save_textures: Whether or not to save the generated textures
-        texture_resolution: The resolution of the generated textures
-        do_plotting: Whether or not to show plots during the calculations
+        variants_data: A list of VariantData objects containing all of the variant data
+                      for each tube part.
+        output_directory: The output directory to store any generated textures
+        configuration: A dictionary with configuration parameters
+        impact_data: A list of ImpactData object containing information about any known
+                     impacting variants. This is used to exlude those variants at the
+                     moment of impact.
     Output:
         A list of all ellipses to create the tube for the input data
     """
@@ -1311,7 +1328,8 @@ def createEllipses(variants_data, output_directory, configuration):
                 t,
                 ssb_normal,
                 texture_directory,
-                configuration
+                configuration,
+                impact_data
             )
             # TODO: Make the number of generated textures configurable and automatically
             # adjust when it comes to witing the tube file

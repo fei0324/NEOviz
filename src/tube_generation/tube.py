@@ -102,6 +102,7 @@ def writeTube(filename, output_directory, time_polygons, configuration):
 
     # Create the file
     filepath = os.path.join(output_directory, filename)
+    print("Writing tube file", filepath)
 
     # Write the tube information to the JSON file
     with open(filepath, 'w') as fp:

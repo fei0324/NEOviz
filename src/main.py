@@ -9,9 +9,9 @@ from dataclasses import dataclass
 import variant_generation.historical_uncertainty as historical_uncertainty
 import variant_generation.sectioned_uncertainty as sectioned_uncertainty
 
-
 import tube_generation.ellipse as ellipse 
 import tube_generation.tube as tube
+import tube_generation.util as util
 import transform_generation.toTransforms as toTransforms
 import transform_generation.toEllipsoids as toEllipsoids
 
@@ -27,16 +27,6 @@ SECONDS_PER_DAY = 86400
 
 # Current version of the configuration files
 CONFIGURATION_VERSION = "0.1"
-
-# Data object to hold variants data
-@dataclass
-class VariantsData:
-    variants_coordinates: list
-    variants_velocities: list
-    times: list
-    covariances: list
-    num_variants: int
-    num_time_steps: int 
 
 
 if __name__ == "__main__":
@@ -58,8 +48,9 @@ if __name__ == "__main__":
     spice.furnsh(PCK_KERNEL)
 
     # Get the input configuration file that contain all settings and parameters
-    #configuration_file = "../config/historical_2004_MN4_test.json"
-    configuration_file = "../config/sectioned_2012_DA14_test.json"
+    #configuration_file = "../config/historical_2004_MN4_high_res.json"
+    configuration_file = "../config/historical_2004_MN4_test.json"
+    #configuration_file = "../config/sectioned_2012_DA14_test.json"
     #configuration_file = "../config/historical_2023_CX1_test.json"
     configuration_data = None
 
@@ -83,7 +74,9 @@ if __name__ == "__main__":
 
     # Extract the necessary configuration settings
     object_id = configuration_data["object_id"]
+    object_identifier = object_id.replace(" ", "_")
     override_existing_results = configuration_data["override_existing_results"]
+    has_impact = configuration_data["has_impact"]
 
     # Create paths to all input data
     tube_type = configuration_data["tube_type"]
@@ -91,6 +84,24 @@ if __name__ == "__main__":
     mpc_directory = os.path.join(input_directory, "mpc_data/")
     orbit_fits_directory = os.path.join(input_directory, "orbit_fits/")
     output_directory = configuration_data["output_directory"]
+
+    # If there are impacts then make sure to read the impact file to exlude them from the
+    # propagation at then moment of impact
+    impact_data = None
+    if has_impact:
+        # Impact code will only work for historic tubes
+        assert tube_type == "historical", "Cannot handle impacts for sectioned tubes"
+
+        # Find the impact file
+        impact_file = os.path.join(
+            input_directory,
+            "impact/" + object_identifier + "_impact.txt"
+        )
+
+        # Read the impact file to get the impact times and identifiers
+        # It is very important that the variants used to generate the impact file is the
+        # same that will be used to create this tube
+        impact_data = util.loadImpactData(impact_file, object_id)
     
     # Create all the output directories
     generated_variants_directory = os.path.join(
@@ -153,12 +164,12 @@ if __name__ == "__main__":
     time_ellipses = ellipse.createEllipses(
         variants_data,
         tube_directory,
-        configuration_data
+        configuration_data,
+        impact_data
     )
 
     # Create the final tube file
     tube_filename = "tube_" + object_id.replace(" ", "_") + ".json"
-    print("Writing tube file", tube_filename)
     tube.writeTube(
         tube_filename,
         tube_directory,
@@ -168,7 +179,6 @@ if __name__ == "__main__":
 
     # Generate transforms for visualization in OpenSpace
     transforms_filename = "transforms_" + object_id.replace(" ", "_") + ".asset"
-    print("Writing transforms file", transforms_filename)
     toTransforms.generateTransforms(
         transforms_filename,
         transforms_directory,
@@ -178,7 +188,6 @@ if __name__ == "__main__":
 
     # Generate ellipsoids for visualization in OpenSpace
     ellipsoids_filename = "ellipsoids_" + object_id.replace(" ", "_") + ".asset"
-    print("Writing ellipsoids file", ellipsoids_filename)
     toEllipsoids.generateEllipsoids(
         ellipsoids_filename,
         ellipsoids_directory,

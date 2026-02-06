@@ -2,8 +2,8 @@
   "version": "0.1",
 
   "object_id": "2004 MN4",
-  "input_directory": "./data",
-  "output_directory": "./generated_data",
+  "input_directory": "../data",
+  "output_directory": "../generated_data",
   "start_time": "2004-12-27T21:00:00.000",
   "end_time": "2029-12-31T00:00:00.000",
 
@@ -18,16 +18,16 @@
   "num_variants": 10000,
   "num_polygon_samples": 80,
 
+  "has_impact": false,
+
   "save_intermediate_results": true,
   "override_existing_results": true,
+  "use_existing_best_fit_orbit": false,
+  "use_existing_variants": false,
 
   "save_textures": true,
   "texture_resolution": 500,
 
   "save_kernels": true,
-  "do_plotting": true
+  "do_plotting": false
 }
-
-"high_res_start_time": "2005-12-01T21:00:00.000",
-  "high_res_end_time": "2005-12-27T21:00:00.000",
-  "end_time": "2005-12-27T21:00:00.000",

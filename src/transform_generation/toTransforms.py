@@ -109,4 +109,5 @@ def generateTransforms(transforms_filename, output_directory, time_polygons,
 
     # Save it to file
     filepath = os.path.join(output_directory, transforms_filename)
+    print("Writing transforms file", filepath)
     util.writeFile(filepath, transforms_asset)
