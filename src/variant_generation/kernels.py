@@ -101,7 +101,7 @@ def create_kernels(propagated_orbits, output_directory, id_offset = 1000000):
     return
 
 
-def saveKernels(propagated_variants, num_variants, output_directory, configuration):
+def saveKernels(propagated_variants, output_directory, configuration):
     """
     Save SPICE kernels for the given propagated variants in the given output directory.
     If there already are kernels in the output directory, and the configuration allows
@@ -110,7 +110,6 @@ def saveKernels(propagated_variants, num_variants, output_directory, configurati
 
     Input:
         propagated_variants: The propagated variants to create SPICE kernels for
-        num_variants: The number of propagated variants
         output_directory: The directory to save the kernels in
         configuration: The configuration
     """

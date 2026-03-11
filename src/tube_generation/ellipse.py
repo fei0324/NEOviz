@@ -1007,7 +1007,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration,
     print("Time step number", time_step, "of", data.num_time_steps)
 
     # Get the variant coordinate list for this timestep. The coordinates are in meters 
-    # and relative the SUN (TODO: Or SSB need to check that)
+    # and relative the SUN
     coordinates = data.variants_coordinates[time_step].T
     bfo_coordinate = data.best_fit_orbit_coordinates[time_step].T[:, 0]
 
@@ -1016,6 +1016,11 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration,
     has_impacts = impact_data is not None
     if has_impacts:
         excluded_variants = util.getImpactedVariantsAtTime(impact_data, time_astropy)
+        
+        if len(excluded_variants) == data.num_variants:
+            print("All variants have impacted, finished")
+            return None, None, None
+        
         if len(excluded_variants) > 0:
             print("Excluding", len(excluded_variants),
                 "impacted variants at this time step")
@@ -1048,7 +1053,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration,
         True
     )
     ellipsoid.center = bfo_coordinate
-
+    
     # Make sure the original ellipsoid does not get normalized, create a deep copy
     normalized_ellipsoid = deepcopy(ellipsoid)
     normalized_ellipsoid = normalizeEllipsoid(
@@ -1331,6 +1336,11 @@ def createEllipses(variants_data, output_directory, configuration, impact_data =
                 configuration,
                 impact_data
             )
+
+            if (ellipse_sample_points is None):
+                # All the variants have impacted at this timestep, we are finished
+                break
+
             # TODO: Make the number of generated textures configurable and automatically
             # adjust when it comes to witing the tube file
 

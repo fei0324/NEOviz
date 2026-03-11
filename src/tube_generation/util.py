@@ -3,6 +3,8 @@ import pingouin as pg
 import spiceypy as spice
 import matplotlib.pyplot as plt
 
+from astropy.time import Time
+
 import tube_generation.plotting as plotting
 
 EPSILON = 1e-4
@@ -21,9 +23,12 @@ def readFile(filename):
         content: The content of the file as a string
     """
 
-    # Open the file, read it and return its content
-    file = open(filename, 'r')
-    content = file.read()
+    # Open the file, read each line and store in a list
+    content = []
+    with open(filename, 'r') as file:
+        for line in file:
+            content.append(line.strip())
+
     return content
 
 
@@ -419,7 +424,8 @@ def getImpactedVariantsAtTime(impact_data, time_astrop):
     # Loop over all impact and check if any of them impact before the given time
     impacted_variants = []
     for impact in impact_data:
-        if impact.time <= time_astrop:
+        impact_time = Time(impact.time, format = "isot", scale='utc')
+        if impact_time <= time_astrop:
             impacted_variants.append(impact.spice_id)
 
     return impacted_variants

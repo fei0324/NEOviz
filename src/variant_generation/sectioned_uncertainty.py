@@ -15,7 +15,7 @@ import variant_generation.adam_util as adam_util
 import variant_generation.kernels as kernels
 
 # Settings for chunking the propagation
-MAX_THREADS = 8
+MAX_THREADS = 2
 VARIANTS_CHUNK_SIZE = 128
 SAMPLES_CHUNK_SIZE = 256
 
@@ -42,8 +42,6 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                        includes the time to start and end the propagation.   
     """
     # Initialize the propagator
-    if not ray.is_initialized():
-        ray.init(num_cpus = MAX_THREADS)
     propagator = ASSISTPropagator()
 
     # Store configuration parameters

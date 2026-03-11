@@ -1,5 +1,6 @@
 import os
 import math
+import ray
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -19,8 +20,8 @@ MINIMUM_TIMESTEPS = 80
 
 # The propagator is slow and cannot handle too amny samples at the same time (even if it
 # chunks) so we need to perform some additional chunking manually.
-MAX_NUM_SAMPLES_PER_BATCH = 512
-MAX_NUM_VARIANTS_PER_BATCH = 256
+MAX_NUM_STEPS_PER_BFO_BATCH = 256
+MAX_NUM_STEPS_PER_V_BATCH = 64
 
 # The number of meters in one Astronomical Unit (AU)
 AU = 149597870700.0
@@ -140,10 +141,15 @@ def loadImpactData(impact_file, orbit_id):
             spice_id = int(parts[0])
             latitude = float(parts[1])
             longitude = float(parts[2])
-            time = parts[3]
+            year = parts[3]
+            month = parts[4]
+            day = parts[5]
+            time = parts[6]
 
-            print("Loaded impact data for variant", spice_id,
-                  "lat:", latitude, "lon:", longitude, "time:", time)
+            # Combine the date and time into a single timestamp string
+            timestamp = f"{year}-{month}-{day}T{time}"
+
+            print("Variant", spice_id, "impacts Earth at time:", timestamp)
 
             # Store it in the list
             impact_data.append(
@@ -151,7 +157,7 @@ def loadImpactData(impact_file, orbit_id):
                     spice_id = spice_id,
                     latitude = latitude,
                     longitude = longitude,
-                    time = time
+                    time = timestamp
                 )
             )
 
@@ -262,8 +268,7 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
                         submission
         propagator: The initialized ASSISTPropagator to use for the propagation
         propagation_times: A Timestamp array containing the times to propagate the
-                           orbit with. These time steps need to go over the full range of
-                           interesting time and cannot be shortened.
+                           orbit with.
         num_samples: The number of samples to draw when creating the covariance matrix
                      using a monte carlo method
         num_threads: The number of threads to use for the propagation. By default no
@@ -277,77 +282,106 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
     print("Starting to propagate the best fit orbit")
     propagated_orbit = None
     bf_orbit = best_fit_orbit.to_orbits()
+    num_time_steps = len(propagation_times)
 
-    # Do manual batching if the number of samples is too high for the propagator to handle
-    if num_samples > MAX_NUM_SAMPLES_PER_BATCH:
-        print("The number of samples is larger than the maximum allowed per batch")
+    # Do manual batching if the number of time steps is too high for the propagator to
+    # handle
+    if num_time_steps > MAX_NUM_STEPS_PER_BFO_BATCH:
+        print("The number of time steps is larger than the maximum allowed per batch")
         print("Performing manual batching of propagation")
 
         # Calculate the number of batches needed
-        num_batches = math.ceil(num_samples / MAX_NUM_SAMPLES_PER_BATCH)
+        num_batches = math.ceil(num_time_steps / MAX_NUM_STEPS_PER_BFO_BATCH)
         print("Number of batches:", num_batches)
 
         # Propagate each batch separately
-        is_first = True
+        propagated_batches = []
         for batch_index in range(num_batches):
             print("Propagating batch", batch_index + 1, "of", num_batches)
 
-            # Calculate the number of samples for this batch
-            start_sample = batch_index * MAX_NUM_SAMPLES_PER_BATCH
-            end_sample = min(start_sample + MAX_NUM_SAMPLES_PER_BATCH, num_samples)
-            batch_num_samples = end_sample - start_sample
-            print("Number of samples in batch:", batch_num_samples)
+            # Calculate the number of time steps for this batch
+            batch_start_time = batch_index * MAX_NUM_STEPS_PER_BFO_BATCH
+            batch_end_time = min(
+                batch_start_time + MAX_NUM_STEPS_PER_BFO_BATCH,
+                num_time_steps
+            )
+            batch_num_steps = batch_end_time - batch_start_time
+            print("Number of time steps in batch:", batch_num_steps)
+            print("Time step range for batch:", batch_start_time, "(in) to",
+                batch_end_time, "(ex)")
 
-            # Slice the coordinates of the best fit orbit to only include the samples for
+            # Slice the propagation times to only include the steps for
             # this batch
-            batch_coordinates = bf_orbit.coordinates
-            batch_coordinates.x = bf_orbit.coordinates.x[start_sample:end_sample]
-            batch_coordinates.y = bf_orbit.coordinates.y[start_sample:end_sample]
-            batch_coordinates.z = bf_orbit.coordinates.z[start_sample:end_sample]
-            batch_coordinates.vx = bf_orbit.coordinates.vx[start_sample:end_sample]
-            batch_coordinates.vy = bf_orbit.coordinates.vy[start_sample:end_sample]
-            batch_coordinates.vz = bf_orbit.coordinates.vz[start_sample:end_sample]
+            batch_propagation_times = propagation_times[batch_start_time:batch_end_time]
+
+
+            # Due to memory leak issue in ray, it is best to re-initialize the propagator
+            # for each batch, as this seems to clear the memory leak. This is not ideal
+            # but it is a workaround to be able to propagate without running out of
+            # memory.
+            if not ray.is_initialized():
+                ray.init(num_cpus = num_threads)
 
             # Propagate the batch
             propagated_batch = propagator.propagate_orbits(
-                Orbits.from_kwargs(
-                    orbit_id = bf_orbit.orbit_id,
-                    object_id = bf_orbit.object_id,
-                    coordinates = batch_coordinates,
-                ),
-                propagation_times, 
+                bf_orbit,
+                batch_propagation_times, 
                 covariance = True,
                 covariance_method = "monte-carlo",
-                num_samples = batch_num_samples,
+                num_samples = num_samples,
                 max_processes = num_threads,
                 chunk_size = chunk_size
             )
-            
-            # Append the propagated batch to the full propagated orbit
-            if is_first:
-                propagated_orbit = propagated_batch
-                is_first = False
-            else:
-                propagated_orbit = concatenate([propagated_orbit, propagated_batch])
 
-        print("Finished all batches")
-        
+            # When finished with the batch, shutdown ray to clear the memory leak before
+            # starting the next batch. And to avoid the memory leak to interfer with the
+            # rest of the code after the propagation.
+            if ray.is_initialized():
+                print("Shutting down ray to clear memory")
+                ray.shutdown()
+       
+            # Append the propagated batch to the full propagated orbit
+            propagated_batches.append(propagated_batch)
+
+        # Concatenate the propagated batches together
+        print("Concatenating propagated batches")
+        propagated_orbit = concatenate(propagated_batches)
+
+        # Sort the Orbits by id and time, as the concatenated batches are out of order
+        propagated_orbit = propagated_orbit.sort_by([
+            "orbit_id", "coordinates.time.days", "coordinates.time.nanos"
+        ])
     else:
+        # Due to memory leak issue in ray, it is best to re-initialize the propagator
+        # for each batch, as this seems to clear the memory leak. This is not ideal
+        # but it is a workaround to be able to propagate the best fit orbit with
+        # covariance information without running out of memory.
+        if not ray.is_initialized():
+            ray.init(num_cpus = num_threads)
+
         # Propagate the best fit orbit for a submission forward in time using the
         # propagation sample times
         propagated_orbit = propagator.propagate_orbits(
-            best_fit_orbit.to_orbits(), 
+            bf_orbit, 
             propagation_times, 
             covariance = True,
             covariance_method = "monte-carlo",
             num_samples = num_samples,
             max_processes = num_threads,
             chunk_size = chunk_size
-        )
-        
+        )  
+
+        # When finished with the batch, shutdown ray to clear the memory leak before
+        # starting the next batch. And to avoid the memory leak to interfer with the
+        # rest of the code after the propagation.
+        if ray.is_initialized():
+            print("Shutting down ray to clear memory")
+            ray.shutdown()
+
     print("Finished propagating the best fit orbit")
-        
+    
     # Convert the propagated orbit times to UTC
+    print("Rescaling times to UTC")
     propagated_orbit = propagated_orbit.set_column(
         "coordinates.time",
         propagated_orbit.coordinates.time.rescale("utc")
@@ -358,9 +392,8 @@ def propagateBestFitOrbit(best_fit_orbit, propagator, propagation_times, num_sam
 
 
 def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
-                      num_variants, submission_number, submission_id, configuration,
-                      start_index = 0, num_threads = 1, chunk_size = 1,
-                      submission_output_directory = ""):
+                      num_variants, submission_number, submission_id, configuration, 
+                      num_threads = 1, chunk_size = 1, submission_output_directory = ""):
     """
     Generate variant orbits based on the propagated best fit orbit for the given
     submission and propagate them forward in time using the given propagation times.
@@ -376,8 +409,6 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
         num_variants: The number of variants to generate
         submission_number: The submission number for the current submission
         submission_id: The submission ID for the current submission
-        start_index: The index in the propagated_best_fit_orbit to use as the
-                     starting point for generating the variants
         num_threads: The number of threads to use for the propagation. By default no
                      multithreading is used
         chunk_size: The chunk size to use for the propagation. By defalut a chunk size of
@@ -389,7 +420,7 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     # Check if there already are variant seeds saved for this submission
     variant_seeds_path = os.path.join(
         submission_output_directory,
-        "variant_seeds.parquet"
+        "variant_seeds_" + str(num_variants) + ".parquet"
     )
     seeds_exists = os.path.exists(variant_seeds_path)
 
@@ -405,12 +436,52 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
         # Use the propagated orbit to generate variant samples based on the uncertainty
         # of the orbit. The index of propagated_best_fit_orbit is which timestep to use to
         # seed the variants at.
-        print("Generating variant samples at timestep", start_index)
+        print("Generating variant samples")
         variants = VariantOrbits.create(
-            propagated_best_fit_orbit[start_index],
+            propagated_best_fit_orbit[0],
             method = "monte-carlo",
             num_samples = num_variants
         )
+
+        # TODO: Add section to only sample from the covariance in a certain specified
+        # region. By removing the variants that are located outside of it and generate new
+        # ones to fill up the gaps. Do this until we have the correct amount fo variants. 
+
+        # Find any diplicates and remove them
+        """
+        unique_variants = []
+        min_distance = AU
+        max_distance = 0.0
+        for i in range(num_variants):
+            duplicate_found = False
+            print("Checking variant", i, "for duplicates")
+            for j in range(i + 1, num_variants):
+                distance = variants[i].coordinates.r * AU - variants[j].coordinates.r * AU
+                distance = np.linalg.norm(distance)
+                #print("Distance between variant", i, "and", j, "is", distance)
+
+                if distance < min_distance:
+                    min_distance = distance
+                if distance > max_distance:
+                    max_distance = distance
+
+                if distance < 1.0:
+                    duplicate_found = True
+                    print("Found duplicate variant at index", i, "and", j)
+                    break
+
+            if not duplicate_found:
+                unique_variants.append(variants[i])
+
+        # If any duplicates were removed then we need to fill up the number of variants to
+        # the desired number
+        print("Minimum distance between variants:", min_distance)
+        print("Maximum distance between variants:", max_distance)
+        if len(unique_variants) < num_variants:
+            print("Duplicates detected!")
+            print("Number of unique variants:", len(unique_variants))
+            assert False, "Duplicates detected in variant generation"
+        """
 
         # Set the correct ID for each variant
         variants = variants.set_column(
@@ -428,13 +499,11 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
             variants.to_parquet(variant_seeds_path)
 
     # Create output directory for batches if requested
-    batches_output_directory = None
-    if configuration["save_intermediate_results"]:
-        batches_output_directory = os.path.join(
-            submission_output_directory,
-            "variant_batches"
-        )
-        os.makedirs(batches_output_directory, exist_ok = True)
+    batches_output_directory = os.path.join(
+        submission_output_directory,
+        "variant_batches_" + str(num_variants)
+    )
+    os.makedirs(batches_output_directory, exist_ok = True)
 
     # Propagate the variants sample points forward in time to the end time
     print("Starting to propagate variant samples")
@@ -442,23 +511,26 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
     # Do manual batching if the number of variants is too high for the propagator
     # to handle
     propagated_variants = None
-    if num_variants > MAX_NUM_VARIANTS_PER_BATCH:
-        print("The number of variants is larger than the maximum allowed per batch")
+    num_time_steps = len(propagation_times)
+    if num_time_steps > MAX_NUM_STEPS_PER_V_BATCH:
+        print("The number of time steps are larger than the maximum allowed per batch")
         print("Performing manual batching of propagation")
 
         # Calculate the number of batches needed
-        num_batches = math.ceil(num_variants / MAX_NUM_VARIANTS_PER_BATCH)
+        num_batches = math.ceil(num_time_steps / MAX_NUM_STEPS_PER_V_BATCH)
         print("Number of batches:", num_batches)
 
         # Propagate each batch separately
         is_first = True
+        propagated_batches = []
         for batch_index in range(num_batches):
             propagated_batch_variants = None
 
             # Check if we can load an existing propagated batch
             batch_parquet_path = os.path.join(
                 batches_output_directory,
-                "propagated_batch_"+ str(batch_index) + ".parquet"
+                "propagated_batch_" + str(num_variants) + "_" + str(batch_index) + \
+                ".parquet"
             )
             parquet_exists = os.path.exists(batch_parquet_path)
 
@@ -470,44 +542,77 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
                 )
                 propagated_batch_variants = Orbits.from_parquet(batch_parquet_path)
             else:
-                print("Propagating batch", batch_index + 1, "of", num_batches)
+                print("Propagating variants batch", batch_index + 1, "of", num_batches)
 
-                # Calculate the number of variants for this batch
-                start_variant = batch_index * MAX_NUM_VARIANTS_PER_BATCH
-                end_variant = min(
-                    start_variant + MAX_NUM_VARIANTS_PER_BATCH,
-                    num_variants
+                # Calculate the number of time steps for this batch
+                batch_start_time = batch_index * MAX_NUM_STEPS_PER_V_BATCH
+                batch_end_time = min(
+                    batch_start_time + MAX_NUM_STEPS_PER_V_BATCH,
+                    num_time_steps
                 )
-                batch_num_variants = end_variant - start_variant
-                print("Number of variants in batch:", batch_num_variants)
+                batch_num_steps = batch_end_time - batch_start_time
+                print("Number of time steps in batch:", batch_num_steps)
+                print("Time step range for batch:", batch_start_time, "(in) to",
+                    batch_end_time, "(ex)")
+
+                # Slice the propagation times to only include the steps for
+                # this batch
+                batch_propagation_times = propagation_times[
+                    batch_start_time:batch_end_time
+                ]
+
+                # Due to memory leak issue in ray, it is best to re-initialize the
+                # propagator for each batch, as this seems to clear the memory leak. This
+                # is not ideal but it is a workaround to be able to propagate without
+                # running out of memory.
+                if not ray.is_initialized():
+                    ray.init(num_cpus = num_threads)
 
                 # Propagate the batch
                 propagated_batch_variants = propagator.propagate_orbits(
                     Orbits.from_kwargs(
-                        orbit_id = variants[start_variant:end_variant].orbit_id,
-                        object_id = variants[start_variant:end_variant].object_id,
-                        coordinates = variants[start_variant:end_variant].coordinates,
+                        orbit_id = variants.orbit_id,
+                        object_id = variants.object_id,
+                        coordinates = variants.coordinates,
                     ), 
-                    propagation_times,
+                    batch_propagation_times,
                     covariance = False,
                     max_processes = num_threads,
                     chunk_size = chunk_size
                 )
+
+                # When finished with the batch, shutdown ray to clear the memory leak
+                # before starting the next batch. And to avoid the memory leak to
+                # interfer with the rest of the code after the propagation.
+                if ray.is_initialized():
+                    print("Shutting down ray to clear memory")
+                    ray.shutdown()
 
                 # Save the batch
                 if configuration["save_intermediate_results"]:
                     propagated_batch_variants.to_parquet(batch_parquet_path)
 
             # Append the propagated batch to the full propagated orbit
-            if is_first:
-                propagated_variants = propagated_batch_variants
-                is_first = False
-            else:
-                propagated_variants = concatenate(
-                    [propagated_variants, propagated_batch_variants]
-                )
+            propagated_batches.append(propagated_batch_variants)
+
+        # Put all the batches together into a single Orbits object
+        print("Concatenating propagated variant batches")
+        propagated_variants = concatenate(propagated_batches)
+
+        # Sort Orbits by variant id and then time, as the concatenated batches are
+        # out of order
+        propagated_variants = propagated_variants.sort_by([
+            "orbit_id", "coordinates.time.days", "coordinates.time.nanos"
+        ])
 
     else:
+        # Due to memory leak issue in ray, it is best to re-initialize the
+        # propagator for each batch, as this seems to clear the memory leak. This
+        # is not ideal but it is a workaround to be able to propagate without
+        # running out of memory.
+        if not ray.is_initialized():
+            ray.init(num_cpus = num_threads)
+
         propagated_variants = propagator.propagate_orbits(
             Orbits.from_kwargs(
                 orbit_id = variants.orbit_id,
@@ -519,6 +624,14 @@ def propagateVariants(propagated_best_fit_orbit, propagator, propagation_times,
             max_processes = num_threads,
             chunk_size = chunk_size
         )
+
+        # When finished with the batch, shutdown ray to clear the memory leak before
+        # starting the next batch. And to avoid the memory leak to interfer with the
+        # rest of the code after the propagation.
+        if ray.is_initialized():
+            print("Shutting down ray to clear memory")
+            ray.shutdown()
+
     print("Finished propagating variant samples")
 
     # Convert the variants timesteps to UTC

@@ -14,6 +14,7 @@ import tube_generation.tube as tube
 import tube_generation.util as util
 import transform_generation.toTransforms as toTransforms
 import transform_generation.toEllipsoids as toEllipsoids
+import variant_generation.adam_util as adam_util
 
 
 # Path to the SPICE kernel files, to initialize SPICE
@@ -101,7 +102,7 @@ if __name__ == "__main__":
         # Read the impact file to get the impact times and identifiers
         # It is very important that the variants used to generate the impact file is the
         # same that will be used to create this tube
-        impact_data = util.loadImpactData(impact_file, object_id)
+        impact_data = adam_util.loadImpactData(impact_file, object_id)
     
     # Create all the output directories
     generated_variants_directory = os.path.join(

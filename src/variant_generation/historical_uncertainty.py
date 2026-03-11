@@ -15,9 +15,9 @@ import variant_generation.adam_util as adam_util
 import variant_generation.kernels as kernels
 
 # Settings for chunking the propagation
-MAX_THREADS = 8
-VARIANTS_CHUNK_SIZE = 128
-SAMPLES_CHUNK_SIZE = 256
+MAX_THREADS = 2
+VARIANTS_CHUNK_SIZE = 256
+SAMPLES_CHUNK_SIZE = 512
 
 # The number of meters in one Astronomical Unit (AU)
 AU = 149597870700.0
@@ -44,8 +44,6 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                        includes the time to start and end the propagation.
     """
     # Initialize the propagator
-    if not ray.is_initialized():
-        ray.init(num_cpus = MAX_THREADS)
     propagator = ASSISTPropagator()
 
     # Store configuration parameters
@@ -177,6 +175,21 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                 # Save the propagated best fit orbit to file
                 print("Saving propagated best fit orbit to", parquet_path)
                 propagated_best_fit_orbit.to_parquet(parquet_path)
+
+            # Create a SPICE kernel for the best fit orbit, if requested
+            if configuration["save_kernels"]:
+                kernel_output_directory = os.path.join(
+                    submission_output_directory,
+                    "best_fit_orbit_kernel_" + str(num_variants)
+                )
+                os.makedirs(kernel_output_directory, exist_ok = True)
+
+                # Create kernel and save to file
+                kernels.saveKernels(
+                    propagated_best_fit_orbit,
+                    kernel_output_directory,
+                    configuration
+                )
         else:
             # Load the stored data
             print(
@@ -259,7 +272,6 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             # Create kernels and save them to file
             kernels.saveKernels(
                 propagated_variants,
-                num_variants,
                 kernels_output_directory,
                 configuration
             )
