@@ -124,22 +124,36 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         propagation_times = None
         num_time_steps = None
         if use_high_res_timeframe:
-            # If high resolution time frame is used, create propagation times within that
-            # time frame instead of over the full start to end times
+            # If high resolution time frame is used, create propagation times with denser
+            # number of timesteps within within that time frame and use the regular time # sampling over the rest of the time span
             # NOTE: If previous oribt/variants exist, and are being used, then if the high
             # res timeframe is different from before (when the variants were generated and
             # stored) it will use the old timesteps. A rerun is only triggered when the
             # override_existing_results flag is set to True (while use_existing_variants
             # is False). Or if the number of variants is different than before.
             propagation_times, num_time_steps = adam_util.getTimeSteps(
+                submission_time,
+                end_time,
+                configuration["sample_multiplier"],
                 high_res_start_time,
                 high_res_end_time,
                 configuration["high_res_sample_multiplier"]
-            ) 
+            )
+            # Convert to a Timestamp array
+            propagation_times = Timestamp.from_mjd(
+                propagation_times.reshape(-1),
+                scale = "utc"
+            )
         else:
             propagation_times, num_time_steps = adam_util.getTimeSteps(
                 submission_time,
-                end_time
+                end_time,
+                configuration["sample_multiplier"]
+            )
+            # Convert to a Timestamp array
+            propagation_times = Timestamp.from_mjd(
+                propagation_times.reshape(-1),
+                scale = "utc"
             )
         
         # Check if there are existing results for this submission
@@ -161,7 +175,7 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
         # Propagate the best fit orbit for this submission forward in time
         propagated_best_fit_orbit = None
         if should_propagate:
-            # TODO: Use more samples for a better covariance matrix estimation?
+            # TODO: What are the sampels used for? A better covariance matrix estimation?
             propagated_best_fit_orbit = adam_util.propagateBestFitOrbit(
                 submission_orbit,
                 propagator,
@@ -276,14 +290,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                 configuration
             )
 
-        # TODO: Fix this
-        # Recompute covariances of propagated variants, collapse the variants into a
-        # single orbit to get one covariance matrix per timestep. Do this last as it will
-        # change the variants data structure
-        #collapsed_variants = propagated_variants.collapse(propagated_best_fit_orbit)
-        #covariances = collapsed_variants.coordinates.covariance.to_matrix()
+        # Convert the covariance matrix of the propagated best fit orbit to a numpy array
         covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
-        #covariances = propagated_variants.coordinates.covariance.to_matrix()
 
         # Store the generated data in a data object
         variant_data = adam_util.VariantsData(

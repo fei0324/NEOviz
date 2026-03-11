@@ -131,45 +131,68 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
             continue
 
         # Create sample times from now to the next submission time
+        propagation_times = None
         num_time_steps = None
         if use_high_res_timeframe:
+            # Check if we are in range to use the high resolution start time 
+            use_high_res_start = False
+            used_start_time = submission_time
             if high_res_start_time > submission_time and \
-                high_res_start_time < next_submission_time:
-                submission_time = high_res_start_time
-                
-            num_time_steps = adam_util.clacNumTimeSteps(
+                high_res_start_time < next_submission_time:  
+                use_high_res_start = True
+                used_start_time = high_res_start_time
+            
+            # Check if we are in range to use the high resolution end time
+            use_high_res_end = False
+            used_end_time = next_submission_time
+            if high_res_end_time > submission_time and \
+                high_res_end_time < next_submission_time:
+                use_high_res_end = True
+                used_end_time = high_res_end_time
+            
+            # If either the high resolution start or end time is within range of the
+            # current submission and the next submission, then we use the high resolution
+            # sampling.
+            if use_high_res_start or use_high_res_end:
+                propagation_times, num_time_steps = adam_util.getTimeSteps(
+                    submission_time,
+                    next_submission_time,
+                    configuration["sample_multiplier"],
+                    used_start_time,
+                    used_end_time,
+                    configuration["high_res_sample_multiplier"]
+                )
+            else:
+                # If not, then use the normal sampling rate for this tube section
+                propagation_times, num_time_steps = adam_util.getTimeSteps(
+                    submission_time,
+                    next_submission_time,
+                    configuration["sample_multiplier"]
+                )
+        else:
+            propagation_times, num_time_steps = adam_util.getTimeSteps(
                 submission_time,
                 next_submission_time,
-                configuration["high_res_sample_multiplier"]
+                configuration["sample_multiplier"]
             )
-        else:
-            num_time_steps = adam_util.clacNumTimeSteps(
-                submission_time,
-                next_submission_time
-            )
+        
         print("Number of time steps", num_time_steps)
         print("From", submission_time, "to", next_submission_time)
-
-        # Create a list of time steps between the start and end interval with the desired
-        # number of steps in between
-        time_steps = np.linspace(
-            submission_time.utc.mjd,
-            next_submission_time.utc.mjd,
-            num_time_steps,
-            endpoint = True
-        )
 
         # Add a small time gap after the start time and before the end time to ensure we
         # capture the changed uncertainty effect
         if submission_number > 0: # No gap for the first submission
-            time_steps[0] = time_steps[0] + gap_percentage * \
-                (time_steps[1] - time_steps[0]) / 100.0
+            propagation_times[0] = propagation_times[0] + gap_percentage * \
+                (propagation_times[1] - propagation_times[0]) / 100.0
         if submission_number < len(submission_orbit) - 1: # No gap for the last submission
-            time_steps[-1] = time_steps[-1] - gap_percentage * \
-                (time_steps[-1] - time_steps[-2]) / 100.0
+            propagation_times[-1] = propagation_times[-1] - gap_percentage * \
+                (propagation_times[-1] - propagation_times[-2]) / 100.0
 
-        # Create the Timestamp array from the time steps and return it
-        propagation_times = Timestamp.from_mjd(time_steps.reshape(-1), scale = "utc")
+        # Convert to a Timestamp array
+        propagation_times = Timestamp.from_mjd(
+            propagation_times.reshape(-1),
+            scale = "utc"
+        )
 
         # Check if there are existing results for this submission
         parquet_path = os.path.join(
@@ -290,14 +313,8 @@ def generateVariants(mpc_directory, orbit_fits_directory, output_directory,
                 configuration
             )
 
-        # TODO: Fix this
-        # Recompute covariances of propagated variants, collapse the variants into a
-        # single orbit to get one covariance matrix per timestep. Do this last as it will
-        # change the variants data structure
-        #collapsed_variants = propagated_variants.collapse(propagated_best_fit_orbit)
-        #covariances = collapsed_variants.coordinates.covariance.to_matrix()
+        # Convert the covariance matrix of the propagated best fit orbit to a numpy array
         covariances = propagated_best_fit_orbit.coordinates.covariance.to_matrix()
-        #covariances = propagated_variants.coordinates.covariance.to_matrix()
 
         # Store the generated data in a data object
         variant_data = adam_util.VariantsData(

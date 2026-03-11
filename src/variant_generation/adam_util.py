@@ -197,33 +197,95 @@ def clacNumTimeSteps(start_interval, end_interval, samples_per_day = 1):
     return max(num_steps, MINIMUM_TIMESTEPS)
 
 
-def getTimeSteps(start_interval, end_interval, samples_per_day = 1):
+def getTimeSteps(start, end, samples_per_day = 1, high_res_start = None,
+                 high_res_end = None, high_res_samples_per_day = 1):
     """
     Generate a Timestamp array containing time steps between the start and end interval
     Input:
-        start_interval: An astropy Time object representing the start of the time interval
-        end_interval: An astropy Time object representing the end of the time interval
-        samples_per_day: The number of samples to take per day
+        start: An astropy Time object representing the start of the time interval
+        end: An astropy Time object representing the end of the time interval
+        samples_per_day: The number of samples to take per day outside the high
+                        resolution time interval
+        high_res_start: An astropy Time object representing the start of the high
+                        resolution time interval. If None, then no high resolution time
+                        span will be generated.
+        high_res_end: An astropy Time object representing the end of the high resolution
+                      time interval. If None, then no high resolution time span will be
+                      generated.
+        high_res_samples_per_day: The number of samples to take per day for the high
+                                 resolution time span. Only used if both high_res_start
+                                 and high_res_end are not None.
     Output:
         time_steps: A Timestamp array containing time steps between the start and end
                     time interval
         num_time_steps: The number of time steps generated
     """
+    
+    # If high resolution time span is used then the time line needs to be divided into 3
+    # parts. Before the high res time span, the high res time span, and after the high
+    # res time span. Each part needs to be generated separately with the correct number
+    # of samples per day, and then combined together.
+    if high_res_start is not None and high_res_end is not None:
+        print("Using high resolution time span from", high_res_start, "to", high_res_end)
+        total_num_time_steps = 0
+        times = []
+
+        # We do not need to add the first part of the time line before the high res time span if both starts are the same
+        if start != high_res_start:
+            # Get the time steps for the first part of the time line before the
+            # high res span
+            times_before, num_steps_before = getTimeSteps(
+                start,
+                high_res_start,
+                samples_per_day
+            )
+            total_num_time_steps += num_steps_before
+            times.append(times_before)
+
+        # Get the time steps for the second part of the time line for the high res time
+        # span
+        high_res_times, num_high_res_steps = getTimeSteps(
+            high_res_start,
+            high_res_end,
+            high_res_samples_per_day
+        )
+        total_num_time_steps += num_high_res_steps
+        times.append(high_res_times)
+
+        # We do not need to add the last part of the time line after the high res time
+        # span if both ends are the same
+        if end != high_res_end:
+            # Get the time steps for the third part of the time line after the
+            # high res time span
+            times_after, num_steps_after = getTimeSteps(
+                high_res_end,
+                end,
+                samples_per_day
+            )
+            total_num_time_steps += num_steps_after
+            times.append(times_after)
+
+        # Combine the time steps together and return them along with the total number of
+        # time steps generated
+        combined_time_steps = np.concatenate(times)
+        print("Number of time steps", total_num_time_steps)
+        return combined_time_steps, total_num_time_steps
+    
     # Calculate the number of timesteps to use for the propagation
-    num_time_steps = clacNumTimeSteps(start_interval, end_interval, samples_per_day)
+    num_time_steps = clacNumTimeSteps(start, end, samples_per_day)
     print("Number of time steps", num_time_steps)
 
     # Create a list of time steps between the start and end interval with the desired
     # number of steps in between
     time_steps = np.linspace(
-        start_interval.utc.mjd,
-        end_interval.utc.mjd,
+        start.utc.mjd,
+        end.utc.mjd,
         num_time_steps,
         endpoint = True
     )
 
-    # Create the Timestamp array from the time steps and return it
-    return Timestamp.from_mjd(time_steps.reshape(-1), scale = "utc"), num_time_steps
+    # Return the time steps 
+    return time_steps, num_time_steps
 
 
 def findVariantsStartTime(propagated_orbit, desired_start_time):

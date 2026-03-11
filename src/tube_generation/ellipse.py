@@ -1327,6 +1327,14 @@ def createEllipses(variants_data, output_directory, configuration, impact_data =
     time_ellipses = []
     for tube_part in variants_data:
         for t in range(tube_part.num_time_steps):
+            # Only process ellipses for the times in the high res timeframe if it is used.
+            time_astropy = tube_part.times[t]
+            if configuration["use_high_res_timeframe"]:
+                if (time_astropy < configuration["high_res_start_time"] or
+                    time_astropy > configuration["high_res_end_time"]):
+                    print("Skipping time", time_astropy, "since it is outside of the high res timeframe")
+                    continue
+
             # Create one ellipse and ellipsoid for this timestep
             ellipse_sample_points, ellipsoid, saved_texture = createEllipse(
                 tube_part,

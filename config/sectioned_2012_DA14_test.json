@@ -6,6 +6,7 @@
   "output_directory": "../generated_data",
   "start_time": "2012-02-23T00:00:00.000",
   "end_time": "2013-12-01T00:00:00.000",
+  "sample_multiplier": 1,
 
   "tube_type": "sectioned",
   "gap_percentage": 5.0,
@@ -13,7 +14,7 @@
   "use_high_res_timeframe": true,
   "high_res_start_time": "2013-01-15T00:00:00.000",
   "high_res_end_time": "2013-03-15T00:00:00.000",
-  "high_res_sample_multiplier": 48,
+  "high_res_sample_multiplier": 24,
 
   "num_variants": 1000,
   "num_polygon_samples": 80,
