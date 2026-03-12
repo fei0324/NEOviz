@@ -230,7 +230,8 @@ def getTimeSteps(start, end, samples_per_day = 1, high_res_start = None,
         total_num_time_steps = 0
         times = []
 
-        # We do not need to add the first part of the time line before the high res time span if both starts are the same
+        # We do not need to add the first part of the time line before the high res time
+        # span if both starts are the same
         if start != high_res_start:
             # Get the time steps for the first part of the time line before the
             # high res span
@@ -239,7 +240,13 @@ def getTimeSteps(start, end, samples_per_day = 1, high_res_start = None,
                 high_res_start,
                 samples_per_day
             )
-            total_num_time_steps += num_steps_before
+
+            # To avoid overlap, we need to remove the last time step from the first part
+            # as it is the same as the first time step of the high res time span
+            times_before = times_before[:-1]
+
+            # Add to the total timeline
+            total_num_time_steps += num_steps_before - 1
             times.append(times_before)
 
         # Get the time steps for the second part of the time line for the high res time
@@ -262,7 +269,13 @@ def getTimeSteps(start, end, samples_per_day = 1, high_res_start = None,
                 end,
                 samples_per_day
             )
-            total_num_time_steps += num_steps_after
+
+            # To avoid overlap, we need to remove the first time step from the third part
+            # as it is the same as the last time step of the high res time span
+            times_after = times_after[1:]
+
+            # Add to the total timeline
+            total_num_time_steps += num_steps_after - 1
             times.append(times_after)
 
         # Combine the time steps together and return them along with the total number of
