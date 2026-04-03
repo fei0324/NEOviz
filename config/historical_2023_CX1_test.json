@@ -18,6 +18,7 @@
 
   "num_variants": 1000,
   "num_polygon_samples": 80,
+  "angle_tolerance": 0.5,
 
   "has_impact": false,
 
@@ -31,5 +32,5 @@
   "use_MVEE_ellipsoid": false,
 
   "save_kernels": false,
-  "do_plotting": true
+  "do_plotting": false
 }

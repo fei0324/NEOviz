@@ -1123,7 +1123,7 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration,
     # Make a rough check if there are outliers in the data for this timestep by comparing
     # the mean and median velocity directions
     # TODO: Make this angle tolerance configurable
-    angle_tolerance = 0.5
+    angle_tolerance = configuration["angle_tolerance"]
     is_deviating = int(0)
     median_velocity_normalized = median_velocity / np.linalg.norm(median_velocity)
     mean_velocity = np.mean(velocities, axis = 1)
