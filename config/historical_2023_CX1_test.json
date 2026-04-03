@@ -23,12 +23,13 @@
 
   "save_intermediate_results": true,
   "override_existing_results": true,
-  "use_existing_best_fit_orbit": false,
-  "use_existing_variants": false,
+  "use_existing_best_fit_orbit": true,
+  "use_existing_variants": true,
 
-  "save_textures": true,
+  "save_textures": false,
   "texture_resolution": 500,
+  "use_MVEE_ellipsoid": false,
 
   "save_kernels": false,
-  "do_plotting": false
+  "do_plotting": true
 }

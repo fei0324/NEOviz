@@ -1046,13 +1046,17 @@ def createEllipse(data, time_step, ssb_normal, texture_directory, configuration,
         plt.show()
 
     # Create an ellipsoid data objects with all of the ellipsoid features
-    ellipsoid = createEllipsoidFromMatrix(
-        coordinates,
-        data.covariances[time_step],
-        do_plotting,
-        True
-    )
-    ellipsoid.center = bfo_coordinate
+    ellipsoid = None
+    if configuration["use_MVEE_ellipsoid"]:
+        ellipsoid = createEllipsoid(coordinates, do_plotting, True)
+    else:
+        ellipsoid = createEllipsoidFromMatrix(
+            coordinates,
+            data.covariances[time_step],
+            do_plotting,
+            True
+        )
+        ellipsoid.center = bfo_coordinate
     
     # Make sure the original ellipsoid does not get normalized, create a deep copy
     normalized_ellipsoid = deepcopy(ellipsoid)
@@ -1332,7 +1336,6 @@ def createEllipses(variants_data, output_directory, configuration, impact_data =
             if configuration["use_high_res_timeframe"]:
                 if (time_astropy < configuration["high_res_start_time"] or
                     time_astropy > configuration["high_res_end_time"]):
-                    print("Skipping time", time_astropy, "since it is outside of the high res timeframe")
                     continue
 
             # Create one ellipse and ellipsoid for this timestep

@@ -28,6 +28,7 @@
 
   "save_textures": true,
   "texture_resolution": 500,
+  "use_MVEE_ellipsoid": true,
 
   "save_kernels": false,
   "do_plotting": false

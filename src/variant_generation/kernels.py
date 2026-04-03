@@ -22,6 +22,7 @@ def create_kernels(propagated_orbits, output_directory, id_offset = 1000000):
                    SPICE id is unique. Default is 1000000.
 
     """
+    
     # Initialize SPICE
     spice.furnsh(LSK_KERNEL)
     spice.furnsh(SPK_KERNEL)

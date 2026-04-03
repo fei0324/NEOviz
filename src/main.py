@@ -50,9 +50,9 @@ if __name__ == "__main__":
 
     # Get the input configuration file that contain all settings and parameters
     #configuration_file = "../config/historical_2004_MN4_high_res.json"
-    configuration_file = "../config/historical_2004_MN4_test.json"
+    #configuration_file = "../config/historical_2004_MN4_test.json"
     #configuration_file = "../config/sectioned_2012_DA14_test.json"
-    #configuration_file = "../config/historical_2023_CX1_test.json"
+    configuration_file = "../config/historical_2023_CX1_test.json"
     configuration_data = None
 
     # Try to read the configuration json file
