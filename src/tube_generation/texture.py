@@ -9,6 +9,42 @@ minor_version = 2
 
 EPSILON = 1e-4
 
+
+def calculateTextureCoordinates(samples_2d, range_x=None, range_y=None):
+    """Calculate UV coordinates and bounds for planar samples.
+
+    ``samples_2d`` uses the polygon pipeline's canonical ``(N, 2)`` layout.
+    The horizontal coordinate is inverted to match the convention used by the
+    existing ellipse tube textures.
+    """
+
+    samples = np.asarray(samples_2d, dtype=float)
+    if samples.ndim != 2 or samples.shape[1] != 2:
+        raise ValueError("samples_2d must have shape (N, 2)")
+    if len(samples) < 3 or not np.all(np.isfinite(samples)):
+        raise ValueError("samples_2d must contain at least three finite points")
+
+    if range_x is None:
+        range_x = np.array([np.min(samples[:, 0]), np.max(samples[:, 0])])
+    else:
+        range_x = np.asarray(range_x, dtype=float)
+    if range_y is None:
+        range_y = np.array([np.min(samples[:, 1]), np.max(samples[:, 1])])
+    else:
+        range_y = np.asarray(range_y, dtype=float)
+    if range_x.shape != (2,) or range_y.shape != (2,):
+        raise ValueError("range_x and range_y must each contain two values")
+    if not np.all(np.isfinite(range_x)) or not np.all(np.isfinite(range_y)):
+        raise ValueError("texture bounds must contain finite values")
+    width = range_x[1] - range_x[0]
+    height = range_y[1] - range_y[0]
+    if width <= 0.0 or height <= 0.0:
+        raise ValueError("texture bounds must have positive width and height")
+
+    u = 1.0 - (samples[:, 0] - range_x[0]) / width
+    v = (samples[:, 1] - range_y[0]) / height
+    return np.column_stack((u, v)), range_x, range_y
+
 def writeTexture(directory, filename, image_matrix, num_channels, resolution, min_values, 
                  max_values):
     """
@@ -195,6 +231,8 @@ def generatePointsTexture(range_x, range_y, resolution, variants_2D):
         y_index = int(
             (variant[1] - range_y[0]) / (range_y[1] - range_y[0]) * (resolution)
         )
+        x_index = max(0, min(resolution - 1, x_index))
+        y_index = max(0, min(resolution - 1, y_index))
 
         # Each variant should be "painted" onto the texture using a hard square brush that
         # overwrites any previously "painted" variants.
@@ -259,6 +297,8 @@ def generateTimeLagsTexture(range_x, range_y, resolution, variants_2D, time_lags
         y_index = int(
             (variant[1] - range_y[0]) / (range_y[1] - range_y[0]) * (resolution)
         )
+        x_index = max(0, min(resolution - 1, x_index))
+        y_index = max(0, min(resolution - 1, y_index))
 
         # Each variant should be "painted" onto the texture using a hard square brush that
         # overwrites any previously "painted" variants.
