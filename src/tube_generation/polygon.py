@@ -21,6 +21,9 @@ from tube_generation import util as tube_util
 from tube_generation import texture as tube_texture
 
 
+POLYGON_COVERAGE_RELATIVE_TOLERANCE = 1e-9
+
+
 @dataclass(frozen=True)
 class AlphaShapeResult:
     """Result of fitting an alpha shape to one projected cut-plane cloud.
@@ -86,7 +89,10 @@ class PolygonRingsResult:
     alpha: float
     diagnostics: tuple[PolygonRingDiagnostic, ...]
     texture_coordinates: dict[int, np.ndarray]
+    center_texture_coordinates: dict[int, np.ndarray]
+    bfo_center_inside_polygon: dict[int, bool]
     variants_2d_km: dict[int, np.ndarray]
+    missing_texture_variant_indices: dict[int, np.ndarray]
     time_offsets_s: dict[int, np.ndarray]
     texture_ranges_x: dict[int, np.ndarray]
     texture_ranges_y: dict[int, np.ndarray]
@@ -631,6 +637,7 @@ def createPolygonsFromStateCache(
             np.all(np.isfinite(positions[cache_index]), axis=1)
             & np.all(np.isfinite(velocities[cache_index]), axis=1)
         )
+        valid_variant_indices = np.flatnonzero(valid)
         if not np.any(valid):
             raise ValueError(
                 f"cache row {cache_index} / polygon {polygon_index} has no finite states"
@@ -644,18 +651,28 @@ def createPolygonsFromStateCache(
             intersections, center_km, normal
         )
         time_offsets_s = time_offsets_s[intersection_valid]
+        variant_indices = valid_variant_indices[intersection_valid]
         if len(points_2d_km) < 4:
             raise ValueError(
                 f"cache row {cache_index} / polygon {polygon_index} has fewer than "
                 "four valid projected points"
             )
-        return polygon_index, center_km, normal, points_2d_km, time_offsets_s
+        return (
+            polygon_index,
+            center_km,
+            normal,
+            points_2d_km,
+            time_offsets_s,
+            variant_indices,
+        )
 
     if start_polygon_index is None:
         selected_start = None
         for cache_index in range(len(indices)):
             try:
-                polygon_index, _, _, points_2d_km, _ = project_cache_index(cache_index)
+                polygon_index, _, _, points_2d_km, _, _ = project_cache_index(
+                    cache_index
+                )
             except ValueError:
                 continue
             normality = pg.multivariate_normality(points_2d_km, alpha=normality_alpha)
@@ -699,15 +716,21 @@ def createPolygonsFromStateCache(
     projected_slices = {}
     for polygon_index in required_indices:
         cache_index = cache_by_polygon[polygon_index]
-        _, center_km, normal, points_2d_km, time_offsets_s = project_cache_index(
-            cache_index
-        )
+        (
+            _,
+            center_km,
+            normal,
+            points_2d_km,
+            time_offsets_s,
+            variant_indices,
+        ) = project_cache_index(cache_index)
         projected_slices[polygon_index] = (
             cache_index,
             center_km,
             normal,
             points_2d_km,
             time_offsets_s,
+            variant_indices,
         )
 
     selected_alpha = float(alpha)
@@ -727,13 +750,23 @@ def createPolygonsFromStateCache(
 
     rings: dict[int, np.ndarray] = {}
     texture_coordinates: dict[int, np.ndarray] = {}
+    center_texture_coordinates: dict[int, np.ndarray] = {}
+    bfo_center_inside_polygon: dict[int, bool] = {}
     variants_2d_km: dict[int, np.ndarray] = {}
+    missing_texture_variant_indices: dict[int, np.ndarray] = {}
     time_offsets_by_polygon: dict[int, np.ndarray] = {}
     texture_ranges_x: dict[int, np.ndarray] = {}
     texture_ranges_y: dict[int, np.ndarray] = {}
     diagnostics = []
     for polygon_index in required_indices:
-        cache_index, center_km, normal, points_2d_km, time_offsets_s = (
+        (
+            cache_index,
+            center_km,
+            normal,
+            points_2d_km,
+            time_offsets_s,
+            variant_indices,
+        ) = (
             projected_slices[polygon_index]
         )
         num_samples = len(polygons[polygon_index]["points"])
@@ -751,14 +784,41 @@ def createPolygonsFromStateCache(
         # these sampled points. Use that same polygon for UV bounds and texture
         # inclusion, rather than the denser alpha-shape boundary from which it
         # was sampled.
+        # Use the same UV convention as the ellipse tube: X maps to inverted U
+        # and Y maps directly to V.
         uv, range_x, range_y = tube_texture.calculateTextureCoordinates(
             samples_2d_km
+        )
+
+        # The cut-plane coordinates are relative to the best-fit-orbit center,
+        # so that center is at (0, 0). Normalize it with the exact same bounds
+        # used for the boundary and texture. Store U in the existing JSON
+        # convention (inverted U, direct V); OpenSpace flips U when loading it.
+        center_x_normalized = (0.0 - range_x[0]) / (range_x[1] - range_x[0])
+        center_y_normalized = (0.0 - range_y[0]) / (range_y[1] - range_y[0])
+        center_texture_coordinates[polygon_index] = np.array(
+            [1.0 - center_x_normalized, center_y_normalized],
+            dtype=float,
         )
 
         # The alpha shape deliberately permits a small number of variants to
         # remain outside the polygon. Do not clamp those variants onto the
         # texture edge, since that would create artificial density there.
-        selected_polygon = prep(Polygon(samples_2d_km))
+        # Treat points that differ from the sampled boundary only by numerical
+        # roundoff as covered.  An exact Shapely predicate can classify such
+        # visually coincident boundary points as outside after the projection
+        # and arc-length interpolation steps.
+        polygon_span_km = float(np.ptp(samples_2d_km, axis=0).max())
+        coverage_tolerance_km = max(
+            polygon_span_km * POLYGON_COVERAGE_RELATIVE_TOLERANCE,
+            np.finfo(float).eps * max(1.0, polygon_span_km) * 32.0,
+        )
+        selected_polygon = prep(
+            Polygon(samples_2d_km).buffer(coverage_tolerance_km)
+        )
+        bfo_center_inside_polygon[polygon_index] = bool(
+            selected_polygon.covers(Point(0.0, 0.0))
+        )
         covered = np.fromiter(
             (selected_polygon.covers(Point(point)) for point in points_2d_km),
             dtype=bool,
@@ -772,6 +832,7 @@ def createPolygonsFromStateCache(
             )
         texture_coordinates[polygon_index] = uv
         variants_2d_km[polygon_index] = texture_points_2d_km
+        missing_texture_variant_indices[polygon_index] = variant_indices[~covered]
         time_offsets_by_polygon[polygon_index] = texture_time_offsets_s
         texture_ranges_x[polygon_index] = range_x
         texture_ranges_y[polygon_index] = range_y
@@ -794,7 +855,10 @@ def createPolygonsFromStateCache(
         alpha=selected_alpha,
         diagnostics=tuple(diagnostics),
         texture_coordinates=texture_coordinates,
+        center_texture_coordinates=center_texture_coordinates,
+        bfo_center_inside_polygon=bfo_center_inside_polygon,
         variants_2d_km=variants_2d_km,
+        missing_texture_variant_indices=missing_texture_variant_indices,
         time_offsets_s=time_offsets_by_polygon,
         texture_ranges_x=texture_ranges_x,
         texture_ranges_y=texture_ranges_y,

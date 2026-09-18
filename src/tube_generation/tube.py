@@ -120,6 +120,11 @@ def createPolygonTube(
     start_polygon_index: int,
     end_polygon_index: int | None = None,
     polygon_texture_coordinates: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_center_texture_coordinates: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_centers_3d_m: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_bfo_centers_3d_m: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_point_densities: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_bfo_center_texture_coordinates: Mapping[int, npt.ArrayLike] | None = None,
 ) -> dict:
     """Create a polygon-only tube in the existing OpenSpace JSON schema.
 
@@ -127,8 +132,10 @@ def createPolygonTube(
     ``end_polygon_index`` (or the source tube's final polygon when omitted).
     A replacement 3D ring is required for
     every polygon in that interval. Slice metadata and per-point data values
-    are copied unchanged. Positions are replaced, and UV coordinates are also
-    replaced when ``polygon_texture_coordinates`` is supplied.
+    are copied unchanged. Positions are replaced, boundary UV coordinates are
+    replaced when ``polygon_texture_coordinates`` is supplied, and center UV
+    coordinates are added to the existing ``center`` object when
+    ``polygon_center_texture_coordinates`` is supplied.
 
     Args:
         source_tube: Parsed existing tube JSON with top-level ``version``,
@@ -140,6 +147,20 @@ def createPolygonTube(
             include.  Earlier ellipse polygons are not copied into the result.
         end_polygon_index: Inclusive final source-tube index.  This permits
             omission of trailing slices outside the variant kernels' coverage.
+        polygon_texture_coordinates: Optional boundary UV coordinates keyed by
+            original source polygon index.
+        polygon_center_texture_coordinates: Optional center UV coordinates
+            keyed by original source polygon index. Each value has shape
+            ``(2,)`` and uses the boundary points' JSON UV convention.
+        polygon_centers_3d_m: Optional replacement mesh-center positions in
+            metres, keyed by original source polygon index.
+        polygon_bfo_centers_3d_m: Optional best-fit-orbit positions in metres.
+            These are serialized as a separate ``bfo-center`` object.
+        polygon_point_densities: Optional replacement boundary density values,
+            with one value per polygon point.
+        polygon_bfo_center_texture_coordinates: Optional BFO UV coordinates keyed
+            by original source polygon index. These require corresponding BFO XYZ
+            coordinates and are added to the ``bfo-center`` object.
 
     Returns:
         A new dictionary with exactly the same structure as the source tube but
@@ -160,6 +181,31 @@ def createPolygonTube(
     ):
         raise TypeError(
             "polygon_texture_coordinates must map source polygon indices to UV arrays"
+        )
+    if polygon_center_texture_coordinates is not None and not isinstance(
+        polygon_center_texture_coordinates, Mapping
+    ):
+        raise TypeError(
+            "polygon_center_texture_coordinates must map source polygon indices "
+            "to center UV coordinates"
+        )
+    for name, values in (
+        ("polygon_centers_3d_m", polygon_centers_3d_m),
+        ("polygon_bfo_centers_3d_m", polygon_bfo_centers_3d_m),
+        ("polygon_point_densities", polygon_point_densities),
+        (
+            "polygon_bfo_center_texture_coordinates",
+            polygon_bfo_center_texture_coordinates,
+        ),
+    ):
+        if values is not None and not isinstance(values, Mapping):
+            raise TypeError(f"{name} must map source polygon indices to arrays")
+    if (
+        polygon_bfo_center_texture_coordinates is not None
+        and polygon_bfo_centers_3d_m is None
+    ):
+        raise ValueError(
+            "BFO center texture coordinates require polygon_bfo_centers_3d_m"
         )
 
     required_top_level = {"version", "texture-channels", "polygons"}
@@ -211,6 +257,36 @@ def createPolygonTube(
             raise ValueError(
                 f"missing polygon UV coordinates for {len(missing_uvs)} slices: "
                 f"{preview}{suffix}"
+            )
+    if polygon_center_texture_coordinates is not None:
+        missing_center_uvs = [
+            index for index in required_indices
+            if index not in polygon_center_texture_coordinates
+        ]
+        if missing_center_uvs:
+            preview = ", ".join(str(index) for index in missing_center_uvs[:10])
+            suffix = "..." if len(missing_center_uvs) > 10 else ""
+            raise ValueError(
+                f"missing polygon center UV coordinates for "
+                f"{len(missing_center_uvs)} slices: {preview}{suffix}"
+            )
+    for name, values in (
+        ("polygon centers", polygon_centers_3d_m),
+        ("polygon BFO centers", polygon_bfo_centers_3d_m),
+        ("polygon point densities", polygon_point_densities),
+        (
+            "polygon BFO center UV coordinates",
+            polygon_bfo_center_texture_coordinates,
+        ),
+    ):
+        if values is None:
+            continue
+        missing_values = [index for index in required_indices if index not in values]
+        if missing_values:
+            preview = ", ".join(str(index) for index in missing_values[:10])
+            suffix = "..." if len(missing_values) > 10 else ""
+            raise ValueError(
+                f"missing {name} for {len(missing_values)} slices: {preview}{suffix}"
             )
 
     polygon_tube = deepcopy(source_tube)
@@ -279,7 +355,85 @@ def createPolygonTube(
                     f"UV array {source_index} contains non-finite coordinates"
                 )
 
+        center_uv = None
+        if polygon_center_texture_coordinates is not None:
+            center_uv = np.asarray(
+                polygon_center_texture_coordinates[source_index], dtype=float
+            )
+            if center_uv.shape != (2,):
+                raise ValueError(
+                    f"center UV {source_index} has shape {center_uv.shape}; "
+                    "expected (2,)"
+                )
+            if not np.all(np.isfinite(center_uv)):
+                raise ValueError(
+                    f"center UV {source_index} contains non-finite coordinates"
+                )
+
+        replacement_center = None
+        if polygon_centers_3d_m is not None:
+            replacement_center = np.asarray(
+                polygon_centers_3d_m[source_index], dtype=float
+            )
+            if replacement_center.shape != (3,) or not np.all(
+                np.isfinite(replacement_center)
+            ):
+                raise ValueError(
+                    f"center {source_index} must contain three finite coordinates"
+                )
+
+        bfo_center = None
+        if polygon_bfo_centers_3d_m is not None:
+            bfo_center = np.asarray(
+                polygon_bfo_centers_3d_m[source_index], dtype=float
+            )
+            if bfo_center.shape != (3,) or not np.all(np.isfinite(bfo_center)):
+                raise ValueError(
+                    f"BFO center {source_index} must contain three finite coordinates"
+                )
+
+        bfo_center_uv = None
+        if polygon_bfo_center_texture_coordinates is not None:
+            bfo_center_uv = np.asarray(
+                polygon_bfo_center_texture_coordinates[source_index], dtype=float
+            )
+            if bfo_center_uv.shape != (2,) or not np.all(np.isfinite(bfo_center_uv)):
+                raise ValueError(
+                    f"BFO center UV {source_index} must contain two finite coordinates"
+                )
+
+        point_densities = None
+        if polygon_point_densities is not None:
+            point_densities = np.asarray(
+                polygon_point_densities[source_index], dtype=float
+            )
+            if point_densities.shape != (len(source_points),):
+                raise ValueError(
+                    f"density array {source_index} has shape {point_densities.shape}; "
+                    f"expected ({len(source_points)},)"
+                )
+            if not np.all(np.isfinite(point_densities)):
+                raise ValueError(
+                    f"density array {source_index} contains non-finite values"
+                )
+
         output_polygon = deepcopy(source_polygon)
+        if replacement_center is not None:
+            output_polygon["center"]["x"] = float(replacement_center[0])
+            output_polygon["center"]["y"] = float(replacement_center[1])
+            output_polygon["center"]["z"] = float(replacement_center[2])
+        if center_uv is not None:
+            output_polygon["center"]["u"] = float(center_uv[0])
+            output_polygon["center"]["v"] = float(center_uv[1])
+        if bfo_center is not None:
+            output_polygon["bfo-center"] = {
+                "x": float(bfo_center[0]),
+                "y": float(bfo_center[1]),
+                "z": float(bfo_center[2]),
+            }
+            if bfo_center_uv is not None:
+                output_polygon["bfo-center"]["u"] = float(bfo_center_uv[0])
+                output_polygon["bfo-center"]["v"] = float(bfo_center_uv[1])
         for point_index, position_m in enumerate(ring):
             output_point = output_polygon["points"][point_index]
             output_point["x"] = float(position_m[0])
@@ -288,6 +442,10 @@ def createPolygonTube(
             if uv_coordinates is not None:
                 output_point["u"] = float(uv_coordinates[point_index, 0])
                 output_point["v"] = float(uv_coordinates[point_index, 1])
+            if point_densities is not None:
+                output_point["data"]["density"] = float(
+                    point_densities[point_index]
+                )
         polygon_tube["polygons"].append(output_polygon)
 
     return polygon_tube
@@ -301,6 +459,11 @@ def writePolygonTube(
     start_polygon_index: int,
     end_polygon_index: int | None = None,
     polygon_texture_coordinates: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_center_texture_coordinates: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_centers_3d_m: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_bfo_centers_3d_m: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_point_densities: Mapping[int, npt.ArrayLike] | None = None,
+    polygon_bfo_center_texture_coordinates: Mapping[int, npt.ArrayLike] | None = None,
 ) -> str:
     """Create and write a schema-compatible polygon-only OpenSpace tube.
 
@@ -317,6 +480,11 @@ def writePolygonTube(
         start_polygon_index,
         end_polygon_index,
         polygon_texture_coordinates,
+        polygon_center_texture_coordinates,
+        polygon_centers_3d_m,
+        polygon_bfo_centers_3d_m,
+        polygon_point_densities,
+        polygon_bfo_center_texture_coordinates,
     )
     output_directory = os.fspath(output_directory)
     os.makedirs(output_directory, exist_ok=True)

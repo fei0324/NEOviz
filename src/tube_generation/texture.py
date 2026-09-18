@@ -45,6 +45,47 @@ def calculateTextureCoordinates(samples_2d, range_x=None, range_y=None):
     v = (samples[:, 1] - range_y[0]) / height
     return np.column_stack((u, v)), range_x, range_y
 
+
+def calculatePolygonTextureCoordinates(samples_2d, range_x=None, range_y=None):
+    """Calculate UV coordinates for polygon-tube cut-plane textures.
+
+    Polygon textures are written as image rows and columns, whose vertical
+    origin is opposite OpenSpace's texture-coordinate origin.  Consequently,
+    X maps directly to U while Y maps to an inverted V coordinate.
+
+    ``samples_2d`` must use the polygon pipeline's canonical ``(N, 2)``
+    layout.  Optional ranges allow the same physical bounds to be shared by
+    the polygon boundary and its generated texture.
+    """
+
+    samples = np.asarray(samples_2d, dtype=float)
+    if samples.ndim != 2 or samples.shape[1] != 2:
+        raise ValueError("samples_2d must have shape (N, 2)")
+    if len(samples) < 3 or not np.all(np.isfinite(samples)):
+        raise ValueError("samples_2d must contain at least three finite points")
+
+    if range_x is None:
+        range_x = np.array([np.min(samples[:, 0]), np.max(samples[:, 0])])
+    else:
+        range_x = np.asarray(range_x, dtype=float)
+    if range_y is None:
+        range_y = np.array([np.min(samples[:, 1]), np.max(samples[:, 1])])
+    else:
+        range_y = np.asarray(range_y, dtype=float)
+    if range_x.shape != (2,) or range_y.shape != (2,):
+        raise ValueError("range_x and range_y must each contain two values")
+    if not np.all(np.isfinite(range_x)) or not np.all(np.isfinite(range_y)):
+        raise ValueError("texture bounds must contain finite values")
+
+    width = range_x[1] - range_x[0]
+    height = range_y[1] - range_y[0]
+    if width <= 0.0 or height <= 0.0:
+        raise ValueError("texture bounds must have positive width and height")
+
+    u = (samples[:, 0] - range_x[0]) / width
+    v = 1.0 - (samples[:, 1] - range_y[0]) / height
+    return np.column_stack((u, v)), range_x, range_y
+
 def writeTexture(directory, filename, image_matrix, num_channels, resolution, min_values, 
                  max_values):
     """
@@ -197,7 +238,15 @@ def generateDensityTexture(range_x, range_y, resolution, variants_2D):
     return image_matrix, min_value, max_value
 
 
-def generatePointsTexture(range_x, range_y, resolution, variants_2D):
+def generatePointsTexture(
+    range_x,
+    range_y,
+    resolution,
+    variants_2D,
+    marker_points_2D=None,
+    marker_values=None,
+    marker_size=9,
+):
     """
     Generate a points position texture from the 2D variant positions using a hard square
     brush.
@@ -207,52 +256,101 @@ def generatePointsTexture(range_x, range_y, resolution, variants_2D):
                  I.e. the min and max values of the ellipse samples points in x
         range_y: The min and max values defining the range of y values for the texture.
         resolution: The resolution of the texture to generate, assumed to be square
-        variants_2D: The intersected variant positions inside the ellipse in 2D
+        variants_2D: The intersected variant positions inside the ellipse in 2D.
+        marker_points_2D: Optional categorical marker positions with shape ``(2, M)``.
+        marker_values: One value greater than 1 for each categorical marker. Markers
+                       are painted in the supplied order after all variants, so later
+                       markers take precedence on overlap.
+        marker_size: Width and height in pixels of each square categorical marker.
     Output:
         image_matrix: The generated points positions image matrix
         min_value: The minimum value in the texture. In this case, known to be 0
-        max_value: The maximum value. In this case we know it to be 1
+        max_value: The maximum categorical value written to the image.
     """
 
     # Settings. TODO: Make this configurable on function call
     brush_size = 2 # This is the radius of the brush in pixels, minus the center point
+    variant_size = brush_size * 2 + 1
+    if (
+        not isinstance(marker_size, (int, np.integer))
+        or marker_size <= 0
+        or marker_size % 2 == 0
+    ):
+        raise ValueError("marker_size must be a positive odd integer")
 
     # Create a blank square texture with the given resolution
     image_matrix = np.zeros((resolution, resolution))
 
-    # Plot the variants onto the texture
-    for v in range(variants_2D.shape[1]):
-        # Clamp the points to fit within the texture given the ellipse samples range in
-        # x and y
-        variant = variants_2D[:, v]
+    variants_2D = np.asarray(variants_2D, dtype=float)
+    if variants_2D.ndim != 2 or variants_2D.shape[0] != 2:
+        raise ValueError("variants_2D must have shape (2, N)")
+    if not np.all(np.isfinite(variants_2D)):
+        raise ValueError("variants_2D must contain only finite values")
+
+    def paint_point(point, value, *, clamp, size):
         x_index = int(
-            (variant[0] - range_x[0]) / (range_x[1] - range_x[0]) * (resolution)
+            (point[0] - range_x[0]) / (range_x[1] - range_x[0]) * resolution
         )
         y_index = int(
-            (variant[1] - range_y[0]) / (range_y[1] - range_y[0]) * (resolution)
+            (point[1] - range_y[0]) / (range_y[1] - range_y[0]) * resolution
         )
+        if not clamp and not (
+            range_x[0] <= point[0] <= range_x[1]
+            and range_y[0] <= point[1] <= range_y[1]
+        ):
+            raise ValueError(
+                f"position marker {point.tolist()} lies outside the texture bounds"
+            )
+        # A point exactly on a maximum bound maps to ``resolution``; place it in
+        # the final pixel, as the existing variant path does.
         x_index = max(0, min(resolution - 1, x_index))
         y_index = max(0, min(resolution - 1, y_index))
 
-        # Each variant should be "painted" onto the texture using a hard square brush that
-        # overwrites any previously "painted" variants.
-        # Determin the area of the image matrix that should be affected by the brush
-        # centered at (x_index, y_index)
-        x_start = max(0, x_index - brush_size)
-        x_end = min(resolution, x_index + brush_size + 1)
-
-        y_start = max(0, y_index - brush_size)
-        y_end = min(resolution, y_index + brush_size + 1)
+        lower_extent = size // 2
+        upper_extent = size - lower_extent
+        x_start = max(0, x_index - lower_extent)
+        x_end = min(resolution, x_index + upper_extent)
+        y_start = max(0, y_index - lower_extent)
+        y_end = min(resolution, y_index + upper_extent)
 
         # Apply the hard square brush to the image matrix. NOTE: The end ranges are one
         # past the last index, excluded
-        image_matrix[x_start:x_end, y_start:y_end] = 1.0
+        image_matrix[x_start:x_end, y_start:y_end] = value
+
+    # Plot variants first, using the established categorical value 1.
+    for v in range(variants_2D.shape[1]):
+        paint_point(variants_2D[:, v], 1.0, clamp=True, size=variant_size)
+
+    maximum_value = 1.0
+    if marker_points_2D is not None or marker_values is not None:
+        if marker_points_2D is None or marker_values is None:
+            raise ValueError(
+                "marker_points_2D and marker_values must either both be supplied or omitted"
+            )
+        marker_points = np.asarray(marker_points_2D, dtype=float)
+        values = np.asarray(marker_values, dtype=float)
+        if marker_points.ndim != 2 or marker_points.shape[0] != 2:
+            raise ValueError("marker_points_2D must have shape (2, M)")
+        if values.shape != (marker_points.shape[1],):
+            raise ValueError("marker_values must contain one value per marker point")
+        if not np.all(np.isfinite(marker_points)) or not np.all(np.isfinite(values)):
+            raise ValueError("marker points and values must be finite")
+        if np.any(values <= 1.0):
+            raise ValueError("marker_values must be greater than the variant value 1")
+        for marker_index, value in enumerate(values):
+            paint_point(
+                marker_points[:, marker_index],
+                float(value),
+                clamp=False,
+                size=int(marker_size),
+            )
+        maximum_value = float(max(maximum_value, np.max(values)))
 
     # Transpose the image matrix to get the correct orientation in OpenSpace
     image_matrix = image_matrix.T
 
     # Return the image matrix with its min and max values
-    return image_matrix, 0.0, 1.0
+    return image_matrix, 0.0, maximum_value
 
 
 def generateTimeLagsTexture(range_x, range_y, resolution, variants_2D, time_lags):
@@ -396,8 +494,19 @@ def combineImages(images_list, resolution):
     return combined_image_matrix    
 
 
-def generateTexture(samples_range_x, samples_range_y, resolution, directory, time_step, 
-                    texture_coordinates, variants_2D, time_lags):
+def generateTexture(
+    samples_range_x,
+    samples_range_y,
+    resolution,
+    directory,
+    time_step,
+    texture_coordinates,
+    variants_2D,
+    time_lags,
+    position_marker_points_2D=None,
+    position_marker_values=None,
+    position_marker_size=9,
+):
     """
     """
 
@@ -414,7 +523,10 @@ def generateTexture(samples_range_x, samples_range_y, resolution, directory, tim
         samples_range_x,
         samples_range_y,
         resolution,
-        variants_2D
+        variants_2D,
+        marker_points_2D=position_marker_points_2D,
+        marker_values=position_marker_values,
+        marker_size=position_marker_size,
     )
 
     # Generate the time lag texture
